@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sbom-researcher"
+version = "0.1.0"
+description = "Cross-platform SBOM vulnerability analyzer (Python port of SBOM-Researcher)"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.31",
+    "packaging>=23",
+    "cyclonedx-python-lib>=22.10",
+    "spdx-tools>=0.8",
+    "cvss>=4.0",
+    "click>=8.1",
+    "rich>=13.0",
+    "pydantic>=2.0",
+    "httpx>=0.25",
+]
+optional-dependencies = {
+    "dev" = [
+        "pytest>=7.4",
+        "pytest-cov>=4.1",
+        "ruff>=0.1",
+        "mypy>=1.5",
+        "pre-commit>=3.5",
+    ]
+}
+
+[project.scripts]
+sbom-researcher = "sbom_researcher.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
