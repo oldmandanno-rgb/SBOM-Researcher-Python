@@ -1,11 +1,14 @@
 """OSV.dev API client for vulnerability queries."""
 
 from __future__ import annotations
+
+from typing import Any
+from typing_extensions import Self
+
 import httpx
-from typing import Optional
 from packaging import version as pkg_version
 
-from .models import Component, Vulnerability, CVSSBreakdown
+from .models import Component, CVSSBreakdown, Vulnerability
 
 
 class OSVClient:
@@ -13,10 +16,10 @@ class OSVClient:
 
     BASE_URL = "https://api.osv.dev/v1/query"
 
-    def __init__(self, timeout: float = 30.0):
+    def __init__(self, timeout: float = 30.0) -> None:
         self.client = httpx.Client(timeout=timeout)
 
-    def query(self, purl: str) -> dict:
+    def query(self, purl: str) -> dict[str, Any]:
         """Query OSV for vulnerabilities affecting a package."""
         # OSV uses "crates.io" not "cargo" for Rust packages
         query_purl = purl.replace(":cargo/", ":crates.io/")
@@ -24,7 +27,7 @@ class OSVClient:
         body = {"package": {"purl": query_purl}}
         response = self.client.post(self.BASE_URL, json=body)
         response.raise_for_status()
-        return response.json()
+        return response.json()  # type: ignore[no-any-return]
 
     def parse_vulnerabilities(self, component: Component, osv_response: dict, min_score: float = 0.0) -> list[Vulnerability]:
         """Parse OSV response into Vulnerability objects."""
@@ -38,7 +41,7 @@ class OSVClient:
                 vulns.append(vuln)
         return vulns
 
-    def _parse_single(self, vuln_data: dict) -> Optional[Vulnerability]:
+    def _parse_single(self, vuln_data: dict) -> Vulnerability | None:
         """Parse a single OSV vulnerability entry."""
         vuln_id = vuln_data.get("id", "")
         summary = vuln_data.get("summary")
@@ -61,7 +64,7 @@ class OSVClient:
         )
         return vuln
 
-    def _extract_fixed_version(self, vuln_data: dict) -> Optional[str]:
+    def _extract_fixed_version(self, vuln_data: dict) -> str | None:
         """Extract the highest fixed version from affected ranges."""
         fixed_versions = []
         for affected in vuln_data.get("affected", []):
@@ -77,11 +80,12 @@ class OSVClient:
 
         # Return highest version
         try:
-            return max(fixed_versions, key=lambda v: pkg_version.parse(v))
-        except Exception:
+            result = max(fixed_versions, key=lambda v: pkg_version.parse(v))
+            return str(result)
+        except pkg_version.InvalidVersion:
             return fixed_versions[0] if fixed_versions else None
 
-    def _parse_cvss(self, vuln_data: dict) -> Optional[CVSSBreakdown]:
+    def _parse_cvss(self, vuln_data: dict) -> CVSSBreakdown | None:
         """Parse CVSS data from OSV response."""
         severities = vuln_data.get("severity", [])
         if not severities:
@@ -110,7 +114,7 @@ class OSVClient:
     def _parse_cvss3(self, vector: str, version: str) -> CVSSBreakdown:
         """Parse CVSS v3.x vector."""
         # Use cvss library for calculation
-        from cvss import CVSS3
+        from cvss import CVSS3  # type: ignore[import-untyped]
         cvss_obj = CVSS3(vector)
         score = cvss_obj.scores()[0]
 
@@ -175,11 +179,11 @@ class OSVClient:
             return "LOW"
         return "NONE"
 
-    def close(self):
+    def close(self) -> None:
         self.client.close()
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *args: object) -> None:
         self.close()

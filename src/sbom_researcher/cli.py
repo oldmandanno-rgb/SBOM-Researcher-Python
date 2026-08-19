@@ -1,16 +1,18 @@
 """CLI entry point for SBOM-Researcher."""
 
 from __future__ import annotations
-import click
+
 from pathlib import Path
+
+import click
+import httpx
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from .models import Report, Component
-from .parser import SBOMParser
+from .models import Component, Report
 from .osv_client import OSVClient
+from .parser import SBOMParser
 from .reporter import Reporter
-
 
 console = Console()
 
@@ -22,7 +24,7 @@ console = Console()
 @click.option("--min-score", "-m", default=0.0, type=float, help="Minimum CVSS score to report (0-10)")
 @click.option("--list-all", "-a", is_flag=True, help="List all components even without vulnerabilities")
 @click.option("--print-licenses", "-l", is_flag=True, help="Include license classification in report")
-def main(sbom_path: Path, output_dir: Path, project_name: str, min_score: float, list_all: bool, print_licenses: bool):
+def main(sbom_path: Path, output_dir: Path, project_name: str, min_score: float, list_all: bool, print_licenses: bool) -> None:
     """Analyze SBOMs for vulnerabilities via OSV.dev."""
     console.print(f"[bold blue]SBOM-Researcher-Python[/bold blue] - Project: {project_name}")
     console.print(f"SBOM Path: {sbom_path}")
@@ -52,7 +54,7 @@ def main(sbom_path: Path, output_dir: Path, project_name: str, min_score: float,
                 all_locations.extend(locations)
                 all_licenses.extend(licenses)
                 console.print(f"  ✓ {sbom_file.name}: {len(components)} components")
-            except Exception as e:
+            except OSError as e:
                 console.print(f"  ✗ {sbom_file.name}: {e}")
             progress.advance(task)
 
@@ -67,23 +69,22 @@ def main(sbom_path: Path, output_dir: Path, project_name: str, min_score: float,
     console.print(f"Total unique components: {len(unique_components)}")
 
     # Query OSV
-    with OSVClient() as osv:
-        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}")) as progress:
-            task = progress.add_task("Querying OSV...", total=len(unique_components))
-            for comp in unique_components:
-                try:
-                    response = osv.query(comp.purl)
-                    vulns = osv.parse_vulnerabilities(comp, response, min_score)
-                    comp.vulnerabilities = vulns
+    with OSVClient() as osv, Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}")) as progress:
+        task = progress.add_task("Querying OSV...", total=len(unique_components))
+        for comp in unique_components:
+            try:
+                response = osv.query(comp.purl)
+                vulns = osv.parse_vulnerabilities(comp, response, min_score)
+                comp.vulnerabilities = vulns
 
-                    # Set recommendation (highest fixed version)
-                    fixed_versions = [v.fixed_version for v in vulns if v.fixed_version]
-                    if fixed_versions:
-                        from packaging import version as pkg_version
-                        comp.recommendation = max(fixed_versions, key=lambda v: pkg_version.parse(v))
-                except Exception as e:
-                    console.print(f"  Error querying {comp.purl}: {e}")
-                progress.advance(task)
+                # Set recommendation (highest fixed version)
+                fixed_versions = [v.fixed_version for v in vulns if v.fixed_version]
+                if fixed_versions:
+                    from packaging import version as pkg_version
+                    comp.recommendation = max(fixed_versions, key=lambda v: pkg_version.parse(v))
+            except (httpx.HTTPError, ValueError) as e:
+                console.print(f"  Error querying {comp.purl}: {e}")
+            progress.advance(task)
 
     # Build report
     report = Report(
@@ -100,7 +101,7 @@ def main(sbom_path: Path, output_dir: Path, project_name: str, min_score: float,
     # Summary
     vuln_count = sum(len(c.vulnerabilities) for c in unique_components)
     comp_with_vulns = sum(1 for c in unique_components if c.vulnerabilities)
-    console.print(f"\n[bold green]Done![/bold green]")
+    console.print("\n[bold green]Done![/bold green]")
     console.print(f"Components with vulnerabilities: {comp_with_vulns}")
     console.print(f"Total vulnerabilities found: {vuln_count}")
     console.print(f"Reports written to: {output_dir}")

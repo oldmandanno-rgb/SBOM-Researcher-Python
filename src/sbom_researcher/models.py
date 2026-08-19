@@ -1,8 +1,8 @@
 """Data models for SBOM components, vulnerabilities, and reports."""
 
 from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Optional
 from enum import Enum
 
 
@@ -27,15 +27,15 @@ class CVSSBreakdown:
     version: str  # "3.0", "3.1", "4.0"
     base_score: float
     severity: str
-    attack_vector: Optional[str] = None
-    attack_complexity: Optional[str] = None
-    privileges_required: Optional[str] = None
-    user_interaction: Optional[str] = None
-    scope: Optional[str] = None
-    confidentiality: Optional[str] = None
-    integrity: Optional[str] = None
-    availability: Optional[str] = None
-    score_url: Optional[str] = None
+    attack_vector: str | None = None
+    attack_complexity: str | None = None
+    privileges_required: str | None = None
+    user_interaction: str | None = None
+    scope: str | None = None
+    confidentiality: str | None = None
+    integrity: str | None = None
+    availability: str | None = None
+    score_url: str | None = None
 
 
 @dataclass
@@ -43,12 +43,12 @@ class Vulnerability:
     """Single vulnerability finding."""
     id: str
     source: str = "OSV"
-    summary: Optional[str] = None
-    details: Optional[str] = None
-    fixed_version: Optional[str] = None
-    cvss: Optional[CVSSBreakdown] = None
-    score: Optional[float] = None
-    severity: Optional[str] = None
+    summary: str | None = None
+    details: str | None = None
+    fixed_version: str | None = None
+    cvss: CVSSBreakdown | None = None
+    score: float | None = None
+    severity: str | None = None
 
 
 @dataclass
@@ -59,7 +59,7 @@ class Component:
     purl: str
     license: str = "NOASSERTION"
     vulnerabilities: list[Vulnerability] = field(default_factory=list)
-    recommendation: Optional[str] = None  # Highest fixed version
+    recommendation: str | None = None  # Highest fixed version
 
 
 @dataclass

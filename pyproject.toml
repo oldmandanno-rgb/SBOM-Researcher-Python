@@ -12,23 +12,22 @@ requires-python = ">=3.10"
 dependencies = [
     "requests>=2.31",
     "packaging>=23",
-    "cyclonedx-python-lib>=22.10",
+    "cyclonedx-python-lib>=9.0",
     "spdx-tools>=0.8",
-    "cvss>=4.0",
+    "cvss>=3.6",
     "click>=8.1",
     "rich>=13.0",
     "pydantic>=2.0",
     "httpx>=0.25",
 ]
-optional-dependencies = {
-    "dev" = [
-        "pytest>=7.4",
-        "pytest-cov>=4.1",
-        "ruff>=0.1",
-        "mypy>=1.5",
-        "pre-commit>=3.5",
-    ]
-}
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "ruff>=0.1",
+    "mypy>=1.5",
+    "pre-commit>=3.5",
+]
 
 [project.scripts]
 sbom-researcher = "sbom_researcher.cli:main"

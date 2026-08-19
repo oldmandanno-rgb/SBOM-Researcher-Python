@@ -1,20 +1,18 @@
 """SBOM parsing for CycloneDX and SPDX formats."""
 
 from __future__ import annotations
+
 import json
 from pathlib import Path
-from typing import Optional
-from cyclonedx.model.bom import Bom
-from cyclonedx.parser import parse_from_json as parse_cyclonedx_json
-from spdx_tools.spdx.parser.parse_anything import parse_file as parse_spdx
+from typing import ClassVar
 
-from .models import Component, ComponentLocation, LicenseInfo, LicenseAction
+from .models import Component, ComponentLocation, LicenseAction, LicenseInfo
 
 
 class SBOMParser:
     """Parse CycloneDX and SPDX SBOMs into internal models."""
 
-    LOW_ACTION_LICENSES = {
+    LOW_ACTION_LICENSES: ClassVar[set[str]] = {
         "GFDL-1.3-or-later", "GFDL-1.3-only", "GFDL-1.2-or-later", "GFDL-1.2-only",
         "Apache", "Apache 2.0", "GNU", "MIT", "MIT License", "Apache-2.0", "ISC",
         "BSD", "BSD-4-Clause", "BSD-3", "BSD-3-Clause", "BSD-2-Clause", "BSD-1-Clause",
@@ -23,14 +21,14 @@ class SBOMParser:
         "Beerware", "PostgreSQL", "OpenSSL", "W3C", "HPND", "curl", "NTP", "WTFPL"
     }
 
-    MED_ACTION_LICENSES = {
+    MED_ACTION_LICENSES: ClassVar[set[str]] = {
         "IPL-1.0", "EPL-2.0", "MPL-1.0", "MPL-1.1", "MPL-2.0", "EPL-1.0",
         "CDDL-1.1", "AFL-2.1", "CPL-1.0", "CC-BY-4.0", "Artistic", "Artistic-2.0",
         "CC-BY-3.0", "AFL-3.0", "BSL-1.0", "OLDAP-2.8", "Python-2.0", "Ruby",
         "X11", "PSF-2.0", "Python", "Python Software Foundation License"
     }
 
-    HIGH_ACTION_LICENSES = {
+    HIGH_ACTION_LICENSES: ClassVar[set[str]] = {
         "AGPL-3.0-or-later", "AGPL-3.0-only", "GPL-1.0-or-later", "GPL-3.0-only",
         "GPL-1.0-only", "LGPL-2.1-only", "LGPL-2.0-only", "LGPL-3.0-only", "GPL",
         "LGPL", "LGPL-2.0-or-later", "LGPL-2.1-or-later", "GPL-2.0-or-later",
@@ -41,7 +39,7 @@ class SBOMParser:
         "CC-BY-SA-4.0"
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.seen_purls: set[str] = set()
 
     def classify_license(self, license_id: str) -> LicenseAction:
@@ -82,15 +80,13 @@ class SBOMParser:
         locations = []
         licenses_map: dict[str, LicenseAction] = {}
 
-        bom = parse_cyclonedx_json(str(sbom_path))
-        for comp in bom.components or []:
-            if comp.type not in ("library", "framework"):
+        for comp in data.get("components", []):
+            if comp.get("type") not in ("library", "framework"):
                 continue
 
-            if not comp.purl:
+            purl = comp.get("purl")
+            if not purl:
                 continue
-
-            purl = str(comp.purl)
             if purl in self.seen_purls:
                 continue
             self.seen_purls.add(purl)
@@ -101,10 +97,11 @@ class SBOMParser:
 
             # License
             license_id = "NOASSERTION"
-            if comp.licenses:
-                lic = comp.licenses[0]
-                if lic.license and lic.license.id:
-                    license_id = lic.license.id
+            licenses = comp.get("licenses", [])
+            if licenses:
+                lic = licenses[0]
+                if lic.get("license", {}).get("id"):
+                    license_id = lic["license"]["id"]
                     licenses_map[license_id] = self.classify_license(license_id)
 
             component = Component(

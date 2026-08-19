@@ -1,13 +1,14 @@
 """Report generation for text and JSON outputs."""
 
 from __future__ import annotations
+
 import json
 from pathlib import Path
-from typing import Optional
+
 from rich.console import Console
 from rich.table import Table
 
-from .models import Report, Component, Vulnerability, CVSSBreakdown, LicenseInfo, LicenseAction
+from .models import LicenseAction, Report
 
 
 class Reporter:
@@ -120,10 +121,10 @@ class Reporter:
 
     def _generate_vuln_json(self, report: Report, path: Path) -> None:
         """Generate vulnerabilities JSON."""
-        data = []
+        data: list[dict] = []
         for comp in report.components:
             if comp.vulnerabilities:
-                comp_data = {
+                comp_data: dict[str, object] = {
                     "name": comp.name,
                     "version": comp.version,
                     "purl": comp.purl,
@@ -131,8 +132,9 @@ class Reporter:
                     "recommendation": comp.recommendation,
                     "vulnerabilities": []
                 }
+                vulnerabilities_list: list[dict[str, object]] = comp_data["vulnerabilities"]  # type: ignore[assignment]
                 for vuln in comp.vulnerabilities:
-                    vuln_data = {
+                    vuln_data: dict[str, object] = {
                         "id": vuln.id,
                         "source": vuln.source,
                         "summary": vuln.summary,
@@ -149,7 +151,7 @@ class Reporter:
                             "severity": vuln.cvss.severity,
                             "score_url": vuln.cvss.score_url
                         }
-                    comp_data["vulnerabilities"].append(vuln_data)
+                    vulnerabilities_list.append(vuln_data)
                 data.append(comp_data)
 
         with path.open("w") as f:
