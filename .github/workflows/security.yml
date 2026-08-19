@@ -2,9 +2,9 @@ name: Security Scans
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [main]
   schedule:
     - cron: '0 6 * * 1'  # Weekly on Monday
 
@@ -111,7 +111,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Semgrep
-        uses: returntocorp/semgrep@v1
+        uses: returntocorp/semgrep@main
         with:
           config: >-
             p/security-audit
