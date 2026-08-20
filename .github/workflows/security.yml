@@ -83,6 +83,7 @@ jobs:
         with:
           name: bandit-report
           path: bandit-report.json
+          retention-days: 1
 
   trivy:
     name: Trivy FS Scan
@@ -106,6 +107,13 @@ jobs:
         uses: github/codeql-action/upload-sarif@9ee088e13615f8d1eaef4766f9dde95d3356a8f6 # v3
         with:
           sarif_file: 'trivy-results.sarif'
+
+      - name: Upload Trivy SARIF for badges
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: trivy-results
+          path: trivy-results.sarif
+          retention-days: 1
 
   semgrep:
     name: Semgrep SAST
@@ -132,6 +140,13 @@ jobs:
         uses: github/codeql-action/upload-sarif@9ee088e13615f8d1eaef4766f9dde95d3356a8f6 # v3
         with:
           sarif_file: semgrep.sarif
+
+      - name: Upload Semgrep SARIF for badges
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: semgrep-results
+          path: semgrep.sarif
+          retention-days: 1
 
   scorecard:
     name: OpenSSF Scorecard
@@ -181,3 +196,131 @@ jobs:
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: ./coverage.xml
+
+  badges:
+    name: Generate Security Badges
+    needs: [bandit, trivy, semgrep]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download Bandit report
+        uses: actions/download-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bandit-report
+          path: artifacts
+
+      - name: Download Trivy results
+        uses: actions/download-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: trivy-results
+          path: artifacts
+        continue-on-error: true
+
+      - name: Download Semgrep results
+        uses: actions/download-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: semgrep-results
+          path: artifacts
+        continue-on-error: true
+
+      - name: Generate badge JSON
+        run: |
+          python << 'EOF'
+          import json
+          import os
+          import glob
+
+          def semgrep_badge():
+              # Semgrep: green if 0 findings or only INFO, yellow if WARNING, red if ERROR
+              sarif_files = glob.glob('artifacts/semgrep*.sarif')
+              if not sarif_files:
+                  return {"schemaVersion": 1, "label": "Semgrep", "message": "no data", "color": "lightgrey"}
+              with open(sarif_files[0]) as f:
+                  data = json.load(f)
+              runs = data.get('runs', [])
+              findings = []
+              for run in runs:
+                  for result in run.get('results', []):
+                      level = result.get('level', 'none')
+                      findings.append(level)
+              has_error = 'error' in findings
+              has_warning = 'warning' in findings
+              total = len(findings)
+              if has_error:
+                  return {"schemaVersion": 1, "label": "Semgrep", "message": f"{total} findings", "color": "red"}
+              elif has_warning:
+                  return {"schemaVersion": 1, "label": "Semgrep", "message": f"{total} findings", "color": "yellow"}
+              else:
+                  return {"schemaVersion": 1, "label": "Semgrep", "message": f"{total} findings", "color": "brightgreen"}
+
+          def bandit_badge():
+              # Bandit: green if 0 or only LOW, yellow if MEDIUM, red if HIGH
+              json_files = glob.glob('artifacts/bandit-report*.json')
+              if not json_files:
+                  return {"schemaVersion": 1, "label": "Bandit", "message": "no data", "color": "lightgrey"}
+              with open(json_files[0]) as f:
+                  data = json.load(f)
+              results = data.get('results', [])
+              severities = [r.get('issue_severity', '').upper() for r in results]
+              has_high = 'HIGH' in severities
+              has_medium = 'MEDIUM' in severities
+              total = len(results)
+              if has_high:
+                  return {"schemaVersion": 1, "label": "Bandit", "message": f"{total} issues", "color": "red"}
+              elif has_medium:
+                  return {"schemaVersion": 1, "label": "Bandit", "message": f"{total} issues", "color": "yellow"}
+              else:
+                  return {"schemaVersion": 1, "label": "Bandit", "message": f"{total} issues", "color": "brightgreen"}
+
+          def trivy_badge():
+              # Trivy: green if 0 or only LOW, yellow if MEDIUM, red if HIGH/CRITICAL
+              sarif_files = glob.glob('artifacts/trivy*.sarif')
+              if not sarif_files:
+                  return {"schemaVersion": 1, "label": "Trivy", "message": "no data", "color": "lightgrey"}
+              with open(sarif_files[0]) as f:
+                  data = json.load(f)
+              runs = data.get('runs', [])
+              severities = []
+              for run in runs:
+                  for result in run.get('results', []):
+                      props = result.get('properties', {})
+                      severity = props.get('severity', '').upper()
+                      if severity:
+                          severities.append(severity)
+              has_critical = 'CRITICAL' in severities
+              has_high = 'HIGH' in severities
+              has_medium = 'MEDIUM' in severities
+              total = len(severities)
+              if has_critical or has_high:
+                  return {"schemaVersion": 1, "label": "Trivy", "message": f"{total} vulns", "color": "red"}
+              elif has_medium:
+                  return {"schemaVersion": 1, "label": "Trivy", "message": f"{total} vulns", "color": "yellow"}
+              else:
+                  return {"schemaVersion": 1, "label": "Trivy", "message": f"{total} vulns", "color": "brightgreen"}
+
+          os.makedirs('badges', exist_ok=True)
+          with open('badges/semgrep.json', 'w') as f:
+              json.dump(semgrep_badge(), f)
+          with open('badges/bandit.json', 'w') as f:
+              json.dump(bandit_badge(), f)
+          with open('badges/trivy.json', 'w') as f:
+              json.dump(trivy_badge(), f)
+          print("Generated badges:")
+          for name in ['semgrep', 'bandit', 'trivy']:
+              with open(f'badges/{name}.json') as f:
+                  print(f"  {name}: {json.load(f)}")
+          EOF
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8d2ffba0 # v4.0.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./badges
+          destination_dir: .
+          keep_files: true
+          force_orphan: true

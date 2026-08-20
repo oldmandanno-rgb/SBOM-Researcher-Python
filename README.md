@@ -5,6 +5,9 @@
 [![CodeQL](https://github.com/oldmandanno-rgb/SBOM-Researcher-Python/workflows/CodeQL/badge.svg)](https://github.com/oldmandanno-rgb/SBOM-Researcher-Python/actions/workflows/security.yml)
 [![Coverage](https://codecov.io/gh/oldmandanno-rgb/SBOM-Researcher-Python/branch/main/graph/badge.svg)](https://codecov.io/gh/oldmandanno-rgb/SBOM-Researcher-Python)
 [![Dependabot](https://badgen.net/github/dependabot/oldmandanno-rgb/SBOM-Researcher-Python)](https://github.com/oldmandanno-rgb/SBOM-Researcher-Python/network/updates)
+[![Semgrep](https://img.shields.io/endpoint?url=https://oldmandanno-rgb.github.io/SBOM-Researcher-Python/semgrep.json)](https://github.com/oldmandanno-rgb/SBOM-Researcher-Python/actions/workflows/security.yml)
+[![Bandit](https://img.shields.io/endpoint?url=https://oldmandanno-rgb.github.io/SBOM-Researcher-Python/bandit.json)](https://github.com/oldmandanno-rgb/SBOM-Researcher-Python/actions/workflows/security.yml)
+[![Trivy](https://img.shields.io/endpoint?url=https://oldmandanno-rgb.github.io/SBOM-Researcher-Python/trivy.json)](https://github.com/oldmandanno-rgb/SBOM-Researcher-Python/actions/workflows/security.yml)
 
 Cross-platform Python port of [bigdawgsfootball/SBOM-Researcher](https://github.com/bigdawgsfootball/SBOM-Researcher) (PowerShell).
 
