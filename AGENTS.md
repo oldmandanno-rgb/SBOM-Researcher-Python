@@ -121,6 +121,11 @@ All must pass before merge:
 - `mypy src/` — type checking (strict mode)
 - `pytest tests/` — unit tests
 
+## Branch Management
+- Stale branches (e.g., `gh-pages`) should be deleted after merge to `main`
+- All changes must go through PRs against `main` (branch protection enabled)
+- After PR merge, review for any leftover branches and clean up
+
 ## Development Setup
 ```bash
 git clone https://github.com/oldmandanno-rgb/SBOM-Researcher-Python.git
