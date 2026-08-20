@@ -66,9 +66,11 @@ class SBOMParser:
 
     def test_purl_format(self, purl: str) -> bool:
         """Validate purl format per original Test-PurlFormat."""
-        # Original regex: ^pkg:[a-z0-9-]+/([a-zA-Z0-9._~-]+/?)+@([v0-9]+\.(\*|[0-9]+)\.(\*|[0-9]+)([+-][a-zA-Z0-9._-]+)?)$
+        # Linearized (ReDoS-safe) form of the original Test-PurlFormat regex: the
+        # name/namespace part uses non-overlapping segments separated by '/' instead of
+        # the ambiguous nested quantifier ([...]+/?)+ which caused exponential backtracking.
         purl_decoded = unquote(purl)
-        purl_regex = r'^pkg:[a-z0-9-]+/([a-zA-Z0-9._~-]+/?)+@([v0-9]+\.(\*|[0-9]+)\.(\*|[0-9]+)([+-][a-zA-Z0-9._-]+)?)$'
+        purl_regex = r'^pkg:[a-z0-9-]+/[a-zA-Z0-9._~-]+(?:/[a-zA-Z0-9._~-]+)*@([v0-9]+\.(\*|[0-9]+)\.(\*|[0-9]+)([+-][a-zA-Z0-9._-]+)?)$'
         return bool(re.match(purl_regex, purl_decoded))
 
     def convert_to_version(self, version_string: str) -> str:
