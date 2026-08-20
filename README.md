@@ -1,5 +1,11 @@
 # SBOM-Researcher-Python
 
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/oldmandanno-rgb/SBOM-Researcher-Python/badge)](https://scorecard.dev/viewer/?uri=github.com/oldmandanno-rgb/SBOM-Researcher-Python)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/oldmandanno-rgb/SBOM-Researcher-Python)
+[![CodeQL](https://github.com/oldmandanno-rgb/SBOM-Researcher-Python/workflows/CodeQL/badge.svg)](https://github.com/oldmandanno-rgb/SBOM-Researcher-Python/actions/workflows/security.yml)
+[![Coverage](https://codecov.io/gh/oldmandanno-rgb/SBOM-Researcher-Python/branch/main/graph/badge.svg)](https://codecov.io/gh/oldmandanno-rgb/SBOM-Researcher-Python)
+[![Dependabot](https://badgen.net/github/dependabot/oldmandanno-rgb/SBOM-Researcher-Python)](https://github.com/oldmandanno-rgb/SBOM-Researcher-Python/network/updates)
+
 Cross-platform Python port of [bigdawgsfootball/SBOM-Researcher](https://github.com/bigdawgsfootball/SBOM-Researcher) (PowerShell).
 
 ## Purpose
@@ -8,7 +14,7 @@ Analyze SBOMs (CycloneDX, SPDX) for vulnerabilities via OSV.dev, calculate CVSS 
 
 ## Status
 
-**Feature complete** — core functionality implemented with exact feature parity to original PowerShell script. 46 unit tests passing.
+**Feature complete** — core functionality implemented with exact feature parity to original PowerShell script. 51 unit tests passing.
 
 ## Original Project
 
