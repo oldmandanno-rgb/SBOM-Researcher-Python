@@ -100,6 +100,33 @@ sbom-researcher --sbom-path PATH --output-dir PATH --project-name NAME \
 4. **Semgrep**: Pinned to `@v1` (stable) instead of `@main`
 5. **Branch protection**: Now enabled — all changes via PR
 
+### Hash-Pinned Requirements (CRITICAL — easy to get wrong)
+Scorecard's **Pinned-Dependencies** check fails (`pipCommand not pinned by hash`,
+`containerImage not pinned by hash`) unless every `pip install` uses
+`--require-hashes -r <file>` against a hash-pinned lockfile, and Docker `FROM` images
+are pinned by `@sha256:` digest.
+
+> **Generate the lockfiles on Linux, not Windows.**
+> `pip`/`uv` hashes are computed per **wheel file**, and wheel hashes differ by OS,
+> architecture, and Python version. If a lockfile is generated on a Windows host (or a
+> different Python version than CI), the hashes will NOT match the `ubuntu-latest` /
+> ClusterFuzzLite runners, and `pip install --require-hashes` will fail in CI even though
+> the workflow "looks" correct. Several prior attempts committed Windows-generated hashes
+> that silently broke the Linux CI.
+
+Rules of thumb:
+- Lockfiles live in `.github/requirements/` (`*.in` sources + `*.txt` lockfiles).
+- Generate with `uv pip compile --generate-hashes --python-version <V>`:
+  - security.yml jobs (`ubuntu-latest`, `setup-python: '3.10'`) → `--python-version 3.10`
+  - ClusterFuzzLite (`gcr.io/oss-fuzz-base/base-builder-python`, Python 3.11) → `--python-version 3.11`
+- Run the generation inside **WSL** (`wsl bash -lc '...'`), a Linux container, or a
+  Linux CI step — never a native Windows shell.
+- Local/editable installs (`pip install -e .`) **cannot** be hash-pinned. Make the
+  package importable via `PYTHONPATH=<repo>/src` instead (pyinstaller bundles it at
+  build time; tests import it directly). Never add a bare `pip install` to a workflow or
+  `build.sh` without `--require-hashes -r <hash-pinned file>`.
+- After editing a `*.in`, regenerate the matching `*.txt` and commit both.
+
 ## Testing
 - Unit tests in `tests/` (51 tests passing)
   - `tests/test_models.py` - 4 tests for data models

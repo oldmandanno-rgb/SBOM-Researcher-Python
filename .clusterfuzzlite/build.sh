@@ -15,9 +15,12 @@
 #
 ################################################################################
 
-# Install the project and dependencies
-pip3 install -e .[dev]
-pip3 install atheris pyinstaller
+# Install the project's runtime dependencies (hash-pinned)
+pip3 install --require-hashes -r .github/requirements/fuzz.txt
+
+# Make the local package importable so pyinstaller can bundle it at build time
+# (atheris and pyinstaller are pre-installed on the base image)
+export PYTHONPATH=$PWD/src
 
 # Build fuzzers into $OUT
 # Fuzzers are in .clusterfuzzlite/ directory
