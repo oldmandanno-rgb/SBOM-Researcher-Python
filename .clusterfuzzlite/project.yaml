@@ -1,0 +1,8 @@
+homepage: "https://github.com/oldmandanno-rgb/SBOM-Researcher-Python"
+language: python
+sanitizers:
+  - address
+  - undefined
+architectures:
+  - x86_64
+main_repo: 'https://github.com/oldmandanno-rgb/SBOM-Researcher-Python.git'

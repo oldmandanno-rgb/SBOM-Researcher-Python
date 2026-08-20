@@ -14,21 +14,9 @@
 
 FROM gcr.io/oss-fuzz-base/base-builder-python
 
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libffi-dev \
-    && rm -rf /var/lib/apt/lists/*
+COPY . $SRC/SBOM-Researcher-Python
+WORKDIR $SRC/SBOM-Researcher-Python
 
-COPY . /src/SBOM-Researcher-Python
-WORKDIR /src/SBOM-Researcher-Python
-
-RUN pip install -e .[dev]
-RUN pip install atheris
-
-# Copy fuzzer
-COPY .clusterfuzzlite/fuzz_*.py /src/SBOM-Researcher-Python/
-
-# Build fuzzers
-RUN python -m atheris.instrument_fuzzer /src/SBOM-Researcher-Python/fuzz_parser.py
-RUN python -m atheris.instrument_fuzzer /src/SBOM-Researcher-Python/fuzz_osv_client.py
-RUN python -m atheris.instrument_fuzzer /src/SBOM-Researcher-Python/fuzz_reporter.py
+COPY .clusterfuzzlite/build.sh $SRC/
+RUN chmod +x $SRC/build.sh
+RUN $SRC/build.sh
