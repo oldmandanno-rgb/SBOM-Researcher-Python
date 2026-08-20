@@ -209,20 +209,20 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download Bandit report
-        uses: actions/download-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.1.8
         with:
           name: bandit-report
           path: artifacts
 
       - name: Download Trivy results
-        uses: actions/download-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.1.8
         with:
           name: trivy-results
           path: artifacts
         continue-on-error: true
 
       - name: Download Semgrep results
-        uses: actions/download-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.1.8
         with:
           name: semgrep-results
           path: artifacts
@@ -317,7 +317,7 @@ jobs:
           EOF
 
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8d2ffba0 # v4.0.0
+        uses: peaceiris/actions-gh-pages@c00c684e61a0b85a1b4b0e3d9d9c1a9e6b5c7d8f # v4.0.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./badges
