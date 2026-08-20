@@ -50,10 +50,10 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.10'
+          
 
       - name: Install dependencies
-        run: |
-          pip install pip-audit==2.10.1
+        run: python -m pip install --require-hashes -r .github/requirements/pip-audit.txt
 
       - name: Run pip-audit
         run: pip-audit --desc || true
@@ -71,9 +71,10 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.10'
+          
 
       - name: Install bandit
-        run: pip install bandit==1.9.4
+        run: python -m pip install --require-hashes -r .github/requirements/bandit.txt
 
       - name: Run bandit
         run: bandit -r src/ -f json -o bandit-report.json || true
@@ -129,9 +130,10 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.10'
+          
 
       - name: Install Semgrep
-        run: pip install semgrep==1.173.0
+        run: python -m pip install --require-hashes -r .github/requirements/semgrep.txt
 
       - name: Run Semgrep
         run: semgrep --config=p/security-audit --config=p/secrets --config=p/python --sarif --output=semgrep.sarif .
@@ -185,11 +187,14 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.10'
+          
 
       - name: Install dependencies
-        run: pip install -e .[dev]
+        run: python -m pip install --require-hashes -r .github/requirements/dev.txt
 
       - name: Run tests
+        env:
+          PYTHONPATH: src
         run: pytest tests/ -v --cov=src/sbom_researcher --cov-report=xml
 
       - name: Upload coverage
@@ -197,9 +202,54 @@ jobs:
         with:
           files: ./coverage.xml
 
+  fuzzing:
+    name: Fuzzing (ClusterFuzzLite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      PYTHONPATH: src
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: python -m pip install --require-hashes -r .github/requirements/dev.txt
+
+      - name: Build fuzzers
+        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          language: python
+          sanitizer: address
+          project-src-path: '/github/workspace'
+          bad-build-check: 'false'
+
+      - name: Run fuzzers
+        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
+        with:
+          fuzz-seconds: 300  # 5 minutes per fuzzer
+          dry-run: false
+          project-src-path: '/github/workspace'
+
+      - name: Upload crash artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzzing-crashes
+          path: |
+            ./crashes/
+            ./fuzzer-output/
+          retention-days: 30
+
   badges:
     name: Generate Security Badges
-    needs: [bandit, trivy, semgrep]
+    needs: [bandit, trivy, semgrep, fuzzing]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -209,20 +259,20 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download Bandit report
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4.1.8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: bandit-report
           path: artifacts
 
       - name: Download Trivy results
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4.1.8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: trivy-results
           path: artifacts
         continue-on-error: true
 
       - name: Download Semgrep results
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4.1.8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: semgrep-results
           path: artifacts
