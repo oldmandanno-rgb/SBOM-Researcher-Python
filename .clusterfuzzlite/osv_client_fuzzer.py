@@ -15,17 +15,19 @@
 
 import sys
 import atheris
+import json
 
 with atheris.instrument_imports():
-    from sbom_researcher.osv_client import parse_vulnerability, extract_affected_versions
-    import json
+    from sbom_researcher.osv_client import OSVClient
+    from sbom_researcher.models import Component
 
 
 def TestOneInput(data):
     fdp = atheris.FuzzedDataProvider(data)
 
-    # Fuzz parse_vulnerability
+    # Fuzz _parse_cvss via OSVClient
     try:
+        client = OSVClient()
         vuln_data = {
             "id": fdp.ConsumeUnicodeNoSurrogates(20),
             "summary": fdp.ConsumeUnicodeNoSurrogates(50),
@@ -33,17 +35,15 @@ def TestOneInput(data):
             "aliases": [fdp.ConsumeUnicodeNoSurrogates(15) for _ in range(fdp.ConsumeIntInRange(0, 3))],
             "modified": "2023-01-01T00:00:00Z",
             "published": "2023-01-01T00:00:00Z",
-            "database_specific": {
-                "severity": fdp.ConsumeUnicodeNoSurrogates(10)
-            }
+            "severity": [{"score": fdp.ConsumeUnicodeNoSurrogates(50)}],
         }
-        json_str = json.dumps(vuln_data)
-        parse_vulnerability(json_str)
+        client._parse_cvss(vuln_data)
     except Exception:
         pass
 
-    # Fuzz extract_affected_versions
+    # Fuzz _extract_fixed_version
     try:
+        client = OSVClient()
         affected = [{
             "package": {
                 "name": fdp.ConsumeUnicodeNoSurrogates(20),
@@ -57,7 +57,33 @@ def TestOneInput(data):
                 ]
             }]
         }]
-        extract_affected_versions(affected)
+        client._extract_fixed_version({"affected": affected})
+    except Exception:
+        pass
+
+    # Fuzz parse_vulnerabilities with a mock component
+    try:
+        client = OSVClient()
+        component = Component(
+            name=fdp.ConsumeUnicodeNoSurrogates(20),
+            version=fdp.ConsumeUnicodeNoSurrogates(10),
+            purl=f"pkg:pypi/{fdp.ConsumeUnicodeNoSurrogates(10)}@{fdp.ConsumeUnicodeNoSurrogates(10)}",
+            licenses=[],
+            locations=[]
+        )
+        osv_response = {
+            "vulns": [{
+                "id": fdp.ConsumeUnicodeNoSurrogates(20),
+                "summary": fdp.ConsumeUnicodeNoSurrogates(50),
+                "details": fdp.ConsumeUnicodeNoSurrogates(100),
+                "severity": [{"score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}],
+                "affected": [{
+                    "package": {"name": "test", "ecosystem": "PyPI"},
+                    "ranges": [{"type": "ECOSYSTEM", "events": [{"fixed": "1.0.0"}]}]
+                }]
+            }]
+        }
+        client.parse_vulnerabilities(component, osv_response)
     except Exception:
         pass
 
