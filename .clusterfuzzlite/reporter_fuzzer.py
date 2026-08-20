@@ -15,10 +15,12 @@
 
 import sys
 import atheris
+import tempfile
+import os
 
 with atheris.instrument_imports():
-    from sbom_researcher.reporter import generate_text_report, generate_vulns_json, generate_locs_json
-    from sbom_researcher.models import Component, Vulnerability, CVSSBreakdown, Report, LicenseInfo
+    from sbom_researcher.reporter import Reporter
+    from sbom_researcher.models import Component, Vulnerability, CVSSBreakdown, Report, LicenseInfo, LicenseAction
     import json
 
 
@@ -67,9 +69,9 @@ def TestOneInput(data):
         )
 
         # Test report generation
-        generate_text_report(report, "test.txt")
-        generate_vulns_json(report, "test_vulns.json")
-        generate_locs_json(report, "test_locs.json")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reporter = Reporter(tmpdir, "test-project")
+            reporter.generate(report, list_all=True, print_licenses=True)
     except Exception:
         pass
 

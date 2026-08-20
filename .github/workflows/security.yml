@@ -233,8 +233,8 @@ jobs:
       - name: Run fuzzers
         uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
         with:
-          fuzz_seconds: 300  # 5 minutes per fuzzer
-          dry_run: false
+          fuzz-seconds: 300  # 5 minutes per fuzzer
+          dry-run: false
           project-src-path: '/github/workspace'
 
       - name: Upload crash artifacts
