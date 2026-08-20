@@ -20,7 +20,8 @@ pip3 install -e .[dev]
 pip3 install atheris pyinstaller
 
 # Build fuzzers into $OUT
-for fuzzer in $(find $SRC -name 'fuzz_*.py'); do
+# Fuzzers are in .clusterfuzzlite/ directory
+for fuzzer in $(find /src/SBOM-Researcher-Python/.clusterfuzzlite -name '*_fuzzer.py'); do
   fuzzer_basename=$(basename -s .py $fuzzer)
   fuzzer_package=${fuzzer_basename}.pkg
 
