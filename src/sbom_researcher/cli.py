@@ -81,7 +81,14 @@ def main(sbom_path: Path, output_dir: Path, project_name: str, min_score: float,
                 fixed_versions = [v.fixed_version for v in vulns if v.fixed_version]
                 if fixed_versions:
                     from packaging import version as pkg_version
-                    comp.recommendation = max(fixed_versions, key=lambda v: pkg_version.parse(v))
+                    _parser = SBOMParser()
+                    def version_key(v: str, p: SBOMParser = _parser) -> pkg_version.Version:
+                        try:
+                            return pkg_version.parse(v)
+                        except pkg_version.InvalidVersion:
+                            # Fallback: normalize version string (port of ConvertTo-Version)
+                            return pkg_version.parse(p.convert_to_version(v))
+                    comp.recommendation = max(fixed_versions, key=version_key)
             except (httpx.HTTPError, ValueError) as e:
                 console.print(f"  Error querying {comp.purl}: {e}")
             progress.advance(task)

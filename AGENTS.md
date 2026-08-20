@@ -3,6 +3,10 @@
 ## Project Overview
 Cross-platform Python port of [bigdawgsfootball/SBOM-Researcher](https://github.com/bigdawgsfootball/SBOM-Researcher) (PowerShell → Python for Linux/macOS/Windows support).
 
+**Core Requirement**: Exact feature parity with the original PowerShell script. The Python port must function identically to the original but run on Linux/macOS/Windows.
+
+> **Note for AI agents**: Update this file (AGENTS.md) as you make changes to the codebase. Keep the Implementation Status table, test counts, and feature status current.
+
 ## Key Decisions
 
 ### Repository Strategy
@@ -25,7 +29,7 @@ Cross-platform Python port of [bigdawgsfootball/SBOM-Researcher](https://github.
 | Type checking | `mypy` | >=1.5 | Strict mode enabled |
 | Linting | `ruff` | >=0.1 | Fast, comprehensive |
 
-**Note**: `cvss` library only supports v3.x; CVSS v4.0 parsing is partial (vector breakdown only, no score calc).
+**Note**: `cvss` library >=3.6 supports CVSS v3.x and v4.0 score calculation. All original test vectors validated against FIRST.org calculator.
 
 ### Architecture
 ```
@@ -38,11 +42,31 @@ src/sbom_researcher/
 └── __init__.py
 ```
 
+### Implementation Status (vs. Original PowerShell)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| CycloneDX JSON parsing | ✅ Complete | |
+| SPDX JSON parsing | ✅ Complete | |
+| OSV.dev API query | ✅ Complete | Includes cargo→crates.io mapping |
+| CVSS v3.0/v3.1 calculation | ✅ Complete | Via `cvss` library |
+| CVSS v4.0 calculation | ✅ Complete | Via `cvss` library (v3.6+) |
+| License classification | ✅ Complete | Identical Low/Med/High/Unmapped lists |
+| Text report (`_report.txt`) | ✅ Complete | |
+| Vulns JSON (`_vulns.json`) | ✅ Complete | |
+| Locations JSON (`_locs.json`) | ✅ Complete | |
+| License JSON (`_license.json`) | ✅ Complete | With `--print-licenses` |
+| CLI interface (6 params) | ✅ Complete | Matches original exactly |
+| Purl format validation | ✅ Complete | Ported `Test-PurlFormat` regex validation |
+| Non-standard version handling | ✅ Complete | Ported `ConvertTo-Version` fallback for version comparison |
+
 ### License Classification (ported from original)
 - **Low Action**: MIT, Apache-2.0, BSD, ISC, Unlicense, etc. (permissive)
 - **Medium Action**: EPL, MPL, CDDL, Artistic, Python-2.0, etc. (weak copyleft)
 - **High Action**: GPL, LGPL, AGPL, CC-BY-SA, etc. (strong copyleft)
 - **Unmapped**: Unknown SPDX IDs
+
+*Lists are identical to the original PowerShell script.*
 
 ### CLI Interface (matches original)
 ```bash
@@ -77,9 +101,19 @@ sbom-researcher --sbom-path PATH --output-dir PATH --project-name NAME \
 5. **Branch protection**: Now enabled — all changes via PR
 
 ## Testing
-- Unit tests in `tests/test_models.py` (4 tests passing)
+- Unit tests in `tests/` (51 tests passing)
+  - `tests/test_models.py` - 4 tests for data models
+  - `tests/test_parser.py` - 33 tests for parser, CVSS v3/v4, license classification, version handling, purl extraction, purl validation, version normalization
+  - `tests/test_osv_client.py` - 14 tests for OSV client, CVSS breakdown, vulnerability parsing
 - Run: `pytest tests/ -v`
-- Coverage: `--cov=src/sbom_researcher`
+- Coverage: `pytest tests/ --cov=src/sbom_researcher`
+
+**Tests are a superset of the original PowerShell Pester tests** — all original test cases ported plus additional tests for new Python-specific functionality (purl validation, version normalization fallback).
+
+All tests ported from original PowerShell Pester tests:
+- SBOMResearcher.ConvertCVSS.Tests.ps1 → test_parser.py (CVSS v3/v4)
+- SBOMResearcher.License.Tests.ps1 → test_parser.py (License classification)
+- SBOMResearcher.Version.Tests.ps1 → test_parser.py (Version handling, purl extraction)
 
 ## Quality Gates
 All must pass before merge:

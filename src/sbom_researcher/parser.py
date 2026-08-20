@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import ClassVar
+from urllib.parse import unquote
 
 from .models import Component, ComponentLocation, LicenseAction, LicenseInfo
 
@@ -61,6 +63,24 @@ class SBOMParser:
         version = version_part.split("?")[0]  # strip qualifiers
         name = prefix.split("/")[-1]
         return name, version
+
+    def test_purl_format(self, purl: str) -> bool:
+        """Validate purl format per original Test-PurlFormat."""
+        # Original regex: ^pkg:[a-z0-9-]+/([a-zA-Z0-9._~-]+/?)+@([v0-9]+\.(\*|[0-9]+)\.(\*|[0-9]+)([+-][a-zA-Z0-9._-]+)?)$
+        purl_decoded = unquote(purl)
+        purl_regex = r'^pkg:[a-z0-9-]+/([a-zA-Z0-9._~-]+/?)+@([v0-9]+\.(\*|[0-9]+)\.(\*|[0-9]+)([+-][a-zA-Z0-9._-]+)?)$'
+        return bool(re.match(purl_regex, purl_decoded))
+
+    def convert_to_version(self, version_string: str) -> str:
+        """Normalize version string by splitting on non-digit/dot and rejoining.
+        
+        Port of original ConvertTo-Version function.
+        """
+        # Split the string by dot or any non-digit character
+        parts = re.split(r'[\.\D]+', version_string)
+        # Filter out empty parts and join with dots
+        parts = [p for p in parts if p]
+        return ".".join(parts)
 
     def parse(self, sbom_path: Path, track_locations: bool = True) -> tuple[list[Component], list[ComponentLocation], list[LicenseInfo]]:
         """Parse SBOM file, return (components, locations, licenses)."""
