@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from typing import Any
-from typing_extensions import Self
 
 import httpx
 from packaging import version as pkg_version
+from typing_extensions import Self
 
 from .models import Component, CVSSBreakdown, Vulnerability
 
