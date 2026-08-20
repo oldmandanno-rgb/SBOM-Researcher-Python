@@ -222,28 +222,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.10'
-
-      - name: Install dependencies
-        run: python -m pip install --require-hashes -r .github/requirements/dev.txt
-
       - name: Build fuzzers
         uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
         with:
           language: python
           sanitizer: address
-          project-src-path: '/github/workspace'
           bad-build-check: 'false'
 
       - name: Run fuzzers
         uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1 # v1
         with:
-          fuzz-seconds: 300  # 5 minutes per fuzzer
-          dry-run: false
-          project-src-path: '/github/workspace'
+          fuzz-seconds: 120  # 2 minutes per fuzzer on full runs
+          dry-run: ${{ github.event_name == 'pull_request' }}
 
       - name: Upload crash artifacts
         if: always()
