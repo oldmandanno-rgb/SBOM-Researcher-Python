@@ -8,6 +8,9 @@ on:
   schedule:
     - cron: '0 6 * * 1'  # Weekly on Monday
 
+permissions:
+  contents: read
+
 jobs:
   codeql:
     name: CodeQL Analysis
@@ -37,6 +40,8 @@ jobs:
   dependabot:
     name: Dependabot Alerts
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,7 +53,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pip-audit
+          pip install pip-audit==2.10.1
 
       - name: Run pip-audit
         run: pip-audit --desc || true
@@ -56,6 +61,8 @@ jobs:
   bandit:
     name: Bandit SAST
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -153,6 +160,8 @@ jobs:
   tests:
     name: Unit Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
