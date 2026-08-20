@@ -2,7 +2,7 @@
 
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/oldmandanno-rgb/SBOM-Researcher-Python/badge)](https://scorecard.dev/viewer/?uri=github.com/oldmandanno-rgb/SBOM-Researcher-Python)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/oldmandanno-rgb/SBOM-Researcher-Python)
-[![CodeQL](https://github.com/oldmandanno-rgb/SBOM-Researcher-Python/workflows/CodeQL/badge.svg)](https://github.com/oldmandanno-rgb/SBOM-Researcher-Python/actions/workflows/security.yml)
+[![CodeQL](https://github.com/oldmandanno-rgb/SBOM-Researcher-Python/workflows/Security%20Scans/badge.svg)](https://github.com/oldmandanno-rgb/SBOM-Researcher-Python/actions/workflows/security.yml)
 [![Coverage](https://codecov.io/gh/oldmandanno-rgb/SBOM-Researcher-Python/branch/main/graph/badge.svg)](https://codecov.io/gh/oldmandanno-rgb/SBOM-Researcher-Python)
 [![Dependabot](https://badgen.net/github/dependabot/oldmandanno-rgb/SBOM-Researcher-Python)](https://github.com/oldmandanno-rgb/SBOM-Researcher-Python/network/updates)
 [![Semgrep](https://img.shields.io/endpoint?url=https://oldmandanno-rgb.github.io/SBOM-Researcher-Python/semgrep.json)](https://github.com/oldmandanno-rgb/SBOM-Researcher-Python/actions/workflows/security.yml)
