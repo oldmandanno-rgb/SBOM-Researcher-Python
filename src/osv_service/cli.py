@@ -35,7 +35,7 @@ def main() -> None:
 
 
 @main.command()
-@click.option("--host", default="0.0.0.0", show_default=True)
+@click.option("--host", default="0.0.0.0", show_default=True)  # nosec B104  # intranet mirror: must be reachable by other hosts on the network
 @click.option("--port", default=8000, type=int, show_default=True)
 @click.option("--data-dir", default=str(DEFAULT_DATA_DIR), show_default=True)
 def serve(host: str, port: int, data_dir: str) -> None:
