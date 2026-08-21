@@ -19,6 +19,8 @@ dependencies = [
     "rich>=13.0",
     "pydantic>=2.0",
     "httpx>=0.25",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
 ]
 [project.optional-dependencies]
 dev = [
@@ -33,6 +35,7 @@ dev = [
 
 [project.scripts]
 sbom-researcher = "sbom_researcher.cli:main"
+osv-service = "osv_service.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -51,3 +54,6 @@ disallow_untyped_defs = true
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
+markers = [
+    "smoke: real-data smoke test that requires network access to api.osv.dev",
+]

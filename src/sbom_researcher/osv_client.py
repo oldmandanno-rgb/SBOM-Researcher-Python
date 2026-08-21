@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import httpx
@@ -16,8 +17,11 @@ class OSVClient:
 
     BASE_URL = "https://api.osv.dev/v1/query"
 
-    def __init__(self, timeout: float = 30.0) -> None:
+    def __init__(self, timeout: float = 30.0, base_url: str | None = None) -> None:
         self.client = httpx.Client(timeout=timeout)
+        # Explicit arg wins; otherwise allow an env override (handy for pointing
+        # the client at a local osv_service mirror during development/testing).
+        self.base_url = base_url or os.environ.get("OSV_API_BASE_URL", self.BASE_URL)
 
     def query(self, purl: str) -> dict[str, Any]:
         """Query OSV for vulnerabilities affecting a package."""
@@ -25,7 +29,7 @@ class OSVClient:
         query_purl = purl.replace(":cargo/", ":crates.io/")
 
         body = {"package": {"purl": query_purl}}
-        response = self.client.post(self.BASE_URL, json=body)
+        response = self.client.post(self.base_url, json=body)
         response.raise_for_status()
         return response.json()  # type: ignore[no-any-return]
 
