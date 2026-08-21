@@ -40,7 +40,37 @@ src/sbom_researcher/
 ├── reporter.py     # Text + JSON report generation (vulns, locations, licenses)
 ├── cli.py          # Click CLI matching original PowerShell interface
 └── __init__.py
+
+src/osv_service/    # Intranet mirror of api.osv.dev (FastAPI) + offline ingestion
+├── models.py       # Pydantic request/response models (osv_service_v1.swagger.json)
+├── store.py        # Filesystem store mirroring GCS layout <ECOSYSTEM>/<ID>.json
+├── matcher.py      # OSV query matching engine (package/version/commit, ranges, pagination)
+├── downloader.py   # GCS JSON+CSV sync, incremental by modified_id.csv, DMZ bundle/import
+├── app.py          # FastAPI app: /v1/query, /v1/querybatch, /v1/vulns/{id}
+├── cli.py          # osv-service CLI: serve / download / bundle / import-bundle
+└── __init__.py
 ```
+
+> **OSV Service (intranet mirror)**: `osv_service` is an API-identical, self-hosted
+> copy of `api.osv.dev` for air-gapped networks. It serves the three production
+> endpoints (`/v1/query`, `/v1/querybatch`, `/v1/vulns/{id}`) and never implements
+> the experimental endpoints. Data is ingested from OSV's GCS exports using only the
+> stable JSON records + `modified_id.csv` change feed (the `all.zip` download is
+> known-unstable and is deliberately NOT used).
+>
+> **Two deployment modes**:
+> - **DMZ copy** (`OSV_SYNC_ENABLED=1`, default): `osv-service download [--loop]`
+>   pulls new/updated records from GCS over HTTPS, then `osv-service bundle` packages
+>   them (JSON files + `manifest.csv`) into a dated `osv_transport/bundle_<ts>/` folder
+>   that a human carries across the air gap.
+> - **Intranet copy** (`OSV_SYNC_ENABLED=0`): never touches GCS; `osv-service
+>   import-bundle --path <bundle>` ingests a bundle, then `osv-service serve` answers
+>   queries. Intranet DNS points `api.osv.dev` at this host so existing tools (incl.
+>   SBOM-Researcher) work unchanged.
+>
+> Storage is filesystem (`<OSV_DATA_DIR>/<ECOSYSTEM>/<ID>.json`) for easy copying; a
+> SQL Server/Postgres backend can be dropped in later behind the same `VulnStore`
+> interface used by `matcher.py`.
 
 ### Implementation Status (vs. Original PowerShell)
 
@@ -128,10 +158,13 @@ Rules of thumb:
 - After editing a `*.in`, regenerate the matching `*.txt` and commit both.
 
 ## Testing
-- Unit tests in `tests/` (51 tests passing)
+- Unit tests in `tests/` (68 tests passing)
   - `tests/test_models.py` - 4 tests for data models
   - `tests/test_parser.py` - 33 tests for parser, CVSS v3/v4, license classification, version handling, purl extraction, purl validation, version normalization
   - `tests/test_osv_client.py` - 14 tests for OSV client, CVSS breakdown, vulnerability parsing
+  - `tests/test_osv_service.py` - 14 tests for the OSV mirror API parity + SBOM-Researcher `OSVClient` integration
+  - `tests/test_downloader.py` - 2 tests for GCS sync (incremental) + DMZ bundle/import transfer
+  - `tests/test_smoke_realdata.py` - 1 real-data parity test (marker `smoke`, network-guarded, fetches a single real record)
 - Run: `pytest tests/ -v`
 - Coverage: `pytest tests/ --cov=src/sbom_researcher`
 
