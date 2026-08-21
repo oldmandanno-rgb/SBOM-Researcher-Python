@@ -17,7 +17,7 @@ This repository contains two related tools:
    source for each component, then produces human-readable and JSON reports
    with CVSS scoring (v3.0 / v3.1 / v4.0) and license-risk classification.
    It is provided here as a **custom example client** for the service below.
-2. **osv_service** — a self-hosted, API-identical mirror of
+2. **OSV-Service** — a self-hosted, API-identical mirror of
    [`api.osv.dev`](https://api.osv.dev) for air-gapped / intranet networks.
    Because the API is byte-for-byte compatible, **any tool that already speaks
    OSV.dev works unchanged** — including commercial scanners and SBOM tools —
@@ -26,13 +26,12 @@ This repository contains two related tools:
 ## Purpose
 
 Organizations that cannot reach the public internet still need vulnerability
-data. `osv_service` is an intranet copy of OSV.dev that:
+data. `OSV-Service` is an intranet copy of OSV.dev that:
 
 * serves the same three production endpoints (`/v1/query`, `/v1/querybatch`,
   `/v1/vulns/{id}`) with identical request/response shapes,
-* ingests data from OSV's own GCS exports (the stable JSON records + the
-  `modified_id.csv` change feed — the unstable `all.zip` is deliberately **not**
-  used), and
+* ingests data from OSV's own GCS exports (the JSON records and the
+  `modified_id.csv` change feed), and
 * provides a human-mediated DMZ → intranet transfer path for air-gapped
   environments.
 
@@ -72,7 +71,7 @@ the `fastapi` / `uvicorn` dependencies the mirror needs.
 
 ---
 
-## Setting up the osv_service mirror
+## Setting up the OSV-Service mirror
 
 ### Two deployment modes
 
