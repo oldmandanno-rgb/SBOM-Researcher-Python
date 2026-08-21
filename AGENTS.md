@@ -182,6 +182,13 @@ All must pass before merge:
 - `pytest tests/` — unit tests
 
 ## Branch Management
+- **Commit locally, push only on instruction:** Make local commits as you work, but
+  DO NOT push to the remote until explicitly told. When instructed to push: push the
+  current branch, open a PR, then immediately start a fresh branch off `main`
+  (`git switch -c <new> origin/main`) so no further commits land on the just-pushed
+  branch. This yields exactly one PR per push and prevents the merge-loop (where a
+  branch receives commits after its PR is opened/merged and they get silently
+  orphaned by a squash merge).
 - Stale branches (e.g., `gh-pages`) should be deleted after merge to `main`
 - All changes must go through PRs against `main` (branch protection enabled)
 - **Repo setting `delete_branch_on_merge` is ENABLED** — GitHub auto-deletes the
