@@ -54,9 +54,9 @@ src/osv_service/    # Intranet mirror of api.osv.dev (FastAPI) + offline ingesti
 > **OSV Service (intranet mirror)**: `osv_service` is an API-identical, self-hosted
 > copy of `api.osv.dev` for air-gapped networks. It serves the three production
 > endpoints (`/v1/query`, `/v1/querybatch`, `/v1/vulns/{id}`) and never implements
-> the experimental endpoints. Data is ingested from OSV's GCS exports using only the
-> stable JSON records + `modified_id.csv` change feed (the `all.zip` download is
-> known-unstable and is deliberately NOT used).
+> the experimental endpoints. Data is ingested from OSV's GCS exports using the
+> per-record JSON files and the `modified_id.csv` change feed. The `all.zip` download
+> is not used as the ingestion source.
 >
 > **Two deployment modes**:
 > - **DMZ copy** (`OSV_SYNC_ENABLED=1`, default): `osv-service download [--loop]`
