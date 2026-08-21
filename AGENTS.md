@@ -166,7 +166,7 @@ Rules of thumb:
   - `tests/test_downloader.py` - 2 tests for GCS sync (incremental) + DMZ bundle/import transfer
   - `tests/test_smoke_realdata.py` - 1 real-data parity test (marker `smoke`, network-guarded, fetches a single real record)
 - Run: `pytest tests/ -v`
-- Coverage: `pytest tests/ --cov=src/sbom_researcher`
+- Coverage: `pytest tests/ --cov=src`
 
 **Tests are a superset of the original PowerShell Pester tests** — all original test cases ported plus additional tests for new Python-specific functionality (purl validation, version normalization fallback).
 
