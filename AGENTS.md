@@ -184,7 +184,18 @@ All must pass before merge:
 ## Branch Management
 - Stale branches (e.g., `gh-pages`) should be deleted after merge to `main`
 - All changes must go through PRs against `main` (branch protection enabled)
-- After PR merge, review for any leftover branches and clean up
+- **Repo setting `delete_branch_on_merge` is ENABLED** — GitHub auto-deletes the
+  head branch when a PR is merged. Do not recreate or push to it afterward.
+- **CRITICAL — one branch per PR, and never push to a merged branch:**
+  - As soon as a PR is merged, start any follow-up work on a **brand-new branch**
+    off `main`. Never commit/push more to the branch whose PR was just merged
+    (that recreates the branch, reopens/re-targets the PR, and orphans the commits).
+  - Squash merges only capture the commits present at merge time. Commits pushed
+    to the branch *after* the merge point are NOT included and are effectively lost
+    (git does not mark a squash-merged branch as merged). This is how fixes
+    silently fail to land — always open a fresh PR for anything missed.
+  - After a merge, also delete the local branch (`git branch -D <name>`) so neither
+    the local nor remote copy lingers.
 
 ## Development Setup
 ```bash
