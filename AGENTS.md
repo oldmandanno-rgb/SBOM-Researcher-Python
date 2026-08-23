@@ -101,8 +101,15 @@ PR notes.
   dropped caps, TCP probes), `service.yaml` (ClusterIP + PVC; point intranet DNS
   `api.osv.dev` at it), and `kustomization.yaml`.
 - **CI:** `.github/workflows/build-osv-service.yml` builds, runs Trivy (fail on
-  HIGH/CRITICAL), emits an SPDX SBOM, and (when `GHCR_TOKEN` is set) pushes + keyless-signs
-  to GHCR.
+  HIGH/CRITICAL), emits an SPDX SBOM, then runs a **container smoke test** (mounts
+  `tests/fixtures/osv_store` as `/data` and asserts the API serves it) and a **real
+  k8s test via kind** (boots a single-node cluster, loads the image, applies
+  `deploy/test`, verifies the pod reaches Running and the Service responds). When
+  `GHCR_TOKEN` is set it also pushes + keyless-signs to GHCR.
+- **Local test:** `scripts/local-test.sh` reproduces the exact CI path on your
+  machine (build → docker smoke → kind → kubectl apply -k deploy/test → curl).
+  Requires Docker Desktop + `kind` + `kubectl` installed; run only when you want
+  to test. `tests/fixtures/osv_store/PyPI/GHSA-test-0001.json` is the fixture.
 
 ### Implementation Status (vs. Original PowerShell)
 

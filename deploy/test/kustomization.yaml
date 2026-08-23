@@ -1,0 +1,17 @@
+# Test overlay: points the Deployment at a locally-built image so it can be
+# applied without a real container registry (used by CI and local-test.sh).
+#
+# The base image is "REPLACE_WITH_YOUR_REGISTRY/osv-service:latest"; this overlay
+# rewrites it to the tag produced by the build (osv-service:local in CI/local,
+# or osv-service:ci if you change newTag below). The base's imagePullPolicy is
+# "IfNotPresent", so once `kind load docker-image osv-service:local` has placed
+# the image in the cluster, no registry pull is attempted.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../deployment.yaml
+  - ../service.yaml
+images:
+  - name: REPLACE_WITH_YOUR_REGISTRY/osv-service
+    newName: osv-service
+    newTag: local

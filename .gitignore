@@ -31,3 +31,5 @@ reports/
 *.json
 !pyproject.toml
 !README.md
+# Test fixtures (intentional JSON, required by CI/local container tests)
+!tests/fixtures/**/*.json
