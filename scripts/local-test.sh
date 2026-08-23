@@ -15,6 +15,9 @@
 #   ./scripts/local-test.sh --cleanup  # delete the kind cluster afterwards
 set -euo pipefail
 
+# Ensure tools installed via scripts/install-tools.sh (in ~/.local/bin) are found.
+export PATH="$HOME/.local/bin:$PATH"
+
 IMAGE="osv-service:local"
 CLEANUP_KIND=0
 NO_KIND=0

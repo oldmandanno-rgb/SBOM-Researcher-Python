@@ -19,6 +19,10 @@ ARG CHAINGUARD_DIGEST_RUNTIME=sha256:1878eed1c7e2731f1b52a5a7f4821f413581fcaf034
 # ---------------------------------------------------------------------------
 FROM cgr.dev/chainguard/python:latest-dev@${CHAINGUARD_DIGEST_DEV} AS builder
 
+# Chainguard images run as nonroot by default; switch to root for the build
+# stage (it is discarded) so we can create the venv at /venv and install deps.
+USER root
+
 ENV LANG=C.UTF-8 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
