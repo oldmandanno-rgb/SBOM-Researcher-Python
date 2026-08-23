@@ -125,6 +125,28 @@ PR notes.
 - **Building the image locally:** `docker build -t osv-service:local .` (or run
   `scripts/local-test.sh`). The builder stage runs as `root` (it is discarded) so
   it can create `/venv`; the runtime runs as `nonroot`.
+- **Transparent `api.osv.dev` proxy (Option B):** For air-gapped intranets where
+  some clients (e.g. the PowerShell SBOM-Researcher and other apps that hardcode
+  `api.osv.dev` and cannot be reconfigured) must never reach the real OSV.dev,
+  `osv-service` acts as a drop-in for OSV.dev. It already implements the same
+  `/v1/query`, `/v1/querybatch`, `/v1/vulns/{id}` endpoints, so a TLS-terminating
+  reverse proxy presents `api.osv.dev` (with a cert the intranet trusts) and
+  forwards `/` to `osv-service:8000`. Intranet DNS then points `api.osv.dev` at
+  the proxy — **no app code changes**.
+  - `deploy/proxy/` = nginx Deployment + Service (external `443` → targetPort
+    `8443` so the container stays non-root) + `nginx.conf`. It mounts a `tls`
+    Secret `osv-proxy-tls` (`kubectl create secret tls osv-proxy-tls
+    --cert=api.osv.dev.crt --key=api.osv.dev.key`). Use your **internal-CA**-signed
+    cert in production; the proxy only guarantees the endpoints `osv-service`
+    implements (anything experimental/unimplemented returns 404).
+  - The DMZ copy of `osv-service` must NOT be behind this proxy — there
+    `api.osv.dev` stays real internet so `osv-service download` can sync from GCS.
+    The spoof is intranet-only.
+  - **Local demo:** `scripts/local-proxy.sh` generates a self-signed
+    `api.osv.dev` cert, creates the Secret, deploys the proxy into the existing
+    kind cluster, loads the test fixture, and validates
+    `https://api.osv.dev` reaches `osv-service` over TLS. For real local apps,
+    trust the cert and add `api.osv.dev` to your `hosts` file.
 
 ### Implementation Status (vs. Original PowerShell)
 
