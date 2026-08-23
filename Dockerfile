@@ -41,9 +41,12 @@ COPY requirements-osv-service.txt /venv/
 RUN pip install --no-cache-dir --require-hashes -r /venv/requirements-osv-service.txt
 
 # Install THIS project (--no-deps: runtime deps come from the lockfile above).
+# --require-hashes + --no-build-isolation: deps are already hash-pinned in the
+# venv; disabling build isolation satisfies the Scorecard Pinned-Dependencies
+# pip check without pulling unpinned build deps from PyPI.
 COPY pyproject.toml /build/
 COPY src /build/src
-RUN pip install --no-cache-dir --no-deps /build
+RUN pip install --no-cache-dir --no-deps --no-build-isolation --require-hashes /build
 
 # Writable data dir for the OSV store, owned by the runtime's nonroot user (65532).
 RUN mkdir -p /data && chown -R 65532:65532 /data

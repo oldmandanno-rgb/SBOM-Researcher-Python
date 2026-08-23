@@ -19,26 +19,28 @@ on:
       - "tests/fixtures/**"
       - ".github/workflows/build-osv-service.yml"
 
+# Minimal top-level permissions (read-only). Job-specific write scopes are
+# granted per-job below so the OpenSSF Scorecard Token-Permissions check passes.
 permissions:
   contents: read
-  packages: write        # to push to GHCR
-  security-events: write # to upload Trivy SARIF
-  id-token: write        # for keyless cosign signing
 
 jobs:
   verify:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # to upload Trivy SARIF
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       # -----------------------------------------------------------------------
       # Build (no push) — image tagged osv-service:local, reused by all tests.
       # -----------------------------------------------------------------------
       - name: Build image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: ./Dockerfile
@@ -47,7 +49,7 @@ jobs:
 
       # Trivy image scan; fail the build on HIGH/CRITICAL (upload SARIF either way).
       - name: Trivy image scan
-        uses: aquasecurity/trivy-action@0.30.0
+        uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9724c8a5e33bc2d97a5 # v0.30.0
         with:
           image-ref: osv-service:local
           format: sarif
@@ -58,21 +60,21 @@ jobs:
         continue-on-error: true
 
       - name: Upload Trivy SARIF
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@42947a340483f03ba47bb1a039b2c519aab3df85 # v3
         if: always()
         with:
           sarif_file: trivy.sarif
 
       # Generate an SBOM for the full image (base OS + pip deps).
       - name: Generate SBOM (syft)
-        uses: anchore/sbom-action@v0.18.0
+        uses: anchore/sbom-action@f325610c9f50a54015d37c8d16cb3b0e2c8f4de0 # v0.18.0
         with:
           image: osv-service:local
           format: spdx-json
           output-file: osv-service.spdx.json
 
       - name: Upload SBOM artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: osv-service-sbom
           path: osv-service.spdx.json
@@ -107,12 +109,12 @@ jobs:
       # run, without needing a cloud cluster.
       # -----------------------------------------------------------------------
       - name: Create kind cluster
-        uses: helm/kind-action@v1
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1
         with:
           wait: 120s
 
       - name: Install kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
 
       - name: Load image into kind
         run: kind load docker-image osv-service:local
@@ -144,23 +146,27 @@ jobs:
     needs: verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.GHCR_TOKEN != ''
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write        # to push to GHCR
+      id-token: write        # for keyless cosign signing (OIDC)
     env:
       GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_TOKEN }}
 
       - name: Push image to GHCR
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: ./Dockerfile
@@ -168,7 +174,7 @@ jobs:
           tags: ghcr.io/${{ github.repository }}/osv-service:latest
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
       - name: Sign image (keyless, OIDC)
         run: cosign sign --yes ghcr.io/${{ github.repository }}/osv-service:latest

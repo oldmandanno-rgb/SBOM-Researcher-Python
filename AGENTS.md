@@ -229,9 +229,19 @@ sbom-researcher --sbom-path PATH --output-dir PATH --project-name NAME \
 
 ### Hash-Pinned Requirements (CRITICAL — easy to get wrong)
 Scorecard's **Pinned-Dependencies** check fails (`pipCommand not pinned by hash`,
-`containerImage not pinned by hash`) unless every `pip install` uses
-`--require-hashes -r <file>` against a hash-pinned lockfile, and Docker `FROM` images
-are pinned by `@sha256:` digest.
+`containerImage not pinned by hash`, `third-party GitHubAction not pinned by hash`,
+`downloadThenRun not pinned by hash`) unless:
+- every `pip install` uses `--require-hashes -r <file>` against a hash-pinned
+  lockfile (and local project installs use `--no-deps --no-build-isolation
+  --require-hashes` so no unpinned build deps are pulled),
+- Docker `FROM` images are pinned by `@sha256:` digest,
+- **every GitHub Action `uses:` is pinned to a full 40-char commit SHA** (with a
+  `# vX.Y.Z` comment) — NOT a moving tag like `@v3`. Tags can be moved/yanked; SHAs
+  cannot. Gotcha: action tags are not always what they look like — e.g. `trivy-action`
+  publishes `v0.30.0`, not `0.30.0`; a bare `0.30.0` ref does not exist and the step
+  fails at runtime. Always verify the ref resolves (`gh api .../commits/<ref>`).
+- shell scripts must not `curl ... | python/sh` (Scorecard `downloadThenRun`);
+  download to a temp file, then parse.
 
 > **Generate the lockfiles on Linux, not Windows.**
 > `pip`/`uv` hashes are computed per **wheel file**, and wheel hashes differ by OS,
