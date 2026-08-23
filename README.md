@@ -56,6 +56,15 @@ src/
     ├── downloader.py  # GCS JSON+CSV sync, incremental; DMZ bundle / import-bundle
     ├── app.py         # FastAPI: /v1/query, /v1/querybatch, /v1/vulns/{id}
     └── cli.py         # serve / download / bundle / import-bundle
+
+# Repo-root artifacts
+Dockerfile                     # Multi-stage Chainguard-python image for osv-service
+requirements-osv-service.in   # Minimal runtime deps for the mirror
+requirements-osv-service.txt  # Hash-pinned lock (from scripts/gen-osv-lock.sh)
+deploy/                       # kustomize tree: base / test / proxy (see Deployment)
+scripts/                      # local-test.sh, local-proxy.sh, fetch-digest.sh, gen-osv-lock.sh, install-tools.sh
+.clusterfuzzlite/             # OSS-Fuzz / ClusterFuzzLite harness (build.sh, Dockerfile, fuzz.txt)
+.github/workflows/build-osv-service.yml  # Build -> Trivy -> SPDX SBOM -> kind smoke -> GHCR sign
 ```
 
 ## Installation
@@ -179,6 +188,104 @@ curl http://localhost:8000/v1/vulns/OSV-2020-744
 
 ---
 
+## Deployment (container, Kubernetes, transparent proxy)
+
+The mirror is also shipped as a hardened container image and Kubernetes
+manifests, so it can run in an intranet cluster rather than as a bare
+`pip install`.
+
+### Container image (Docker)
+
+The image is a multi-stage build on a Chainguard `python` (Wolfi) base,
+pinned by `@sha256` digest (regenerate with `scripts/fetch-digest.sh`). The
+runtime stage is distroless (no shell), runs as the built-in `nonroot` user,
+and exposes `osv-service serve` on port `8000` with the store at `/data`.
+
+```bash
+docker build -t osv-service:local .
+docker run -p 8000:8000 -v "$PWD/osv_data:/data" \
+  -e OSV_SYNC_ENABLED=0 \
+  osv-service:local
+```
+
+* `OSV_DATA_DIR` — vulnerability store location (default `/data`).
+* `OSV_SYNC_ENABLED` — set `1` on a **DMZ** copy that runs `osv-service
+  download`; leave `0` (default) on the **intranet** copy. The image's
+  default command is `serve`; for DMZ ingestion run `download`/`bundle` on a
+  host with the package installed (or override the container entrypoint).
+* The runtime lock (`requirements-osv-service.{in,txt}`) is hash-pinned and
+  regenerated with `scripts/gen-osv-lock.sh` (must be produced on Linux per
+  AGENTS.md).
+
+### Kubernetes
+
+`deploy/` is a kustomize tree:
+
+| Path | What it is |
+|------|------------|
+| `deploy/base` | Deployment (runAsNonRoot, readOnlyRootFilesystem, dropped caps, TCP probes) + ClusterIP Service + 20Gi PVC |
+| `deploy/test` | Overlay rewriting the image to `osv-service:local` for local kind testing |
+| `deploy/proxy` | The `api.osv.dev` TLS reverse proxy (Option B, below) |
+
+```bash
+# Production base (intranet serve role)
+kubectl apply -k deploy            # applies deploy/base
+
+# Local testing (after `docker build -t osv-service:local .`)
+kind load docker-image osv-service:local
+kubectl apply -k deploy/test
+```
+
+> **Image registry (required before production apply):** `deploy/base`
+> hardcodes a placeholder `REPLACE_WITH_YOUR_REGISTRY/osv-service:latest`.
+> Replace it with your real image (e.g. the one `build-osv-service.yml`
+> pushes to GHCR when `GHCR_TOKEN` is set) before applying to a real
+> cluster, or the pull will fail. `deploy/test` rewrites it to
+> `osv-service:local` for local kind runs.
+
+The base Deployment sets `OSV_SYNC_ENABLED=0` (intranet / air-gapped). Point
+intranet DNS `api.osv.dev` at the `osv-service` Service so existing
+OSV-speaking tools hit the mirror unchanged.
+
+### Transparent `api.osv.dev` proxy (Option B)
+
+Some clients (e.g. the original PowerShell SBOM-Researcher, or any app that
+hardcodes `api.osv.dev` and cannot be reconfigured) must never reach the real
+OSV.dev. `deploy/proxy` makes `osv-service` a drop-in for OSV.dev: an nginx
+Deployment presents `api.osv.dev` over TLS (external `443` -> container
+`8443`) and reverse-proxies `/` to `osv-service:8000`. With intranet DNS
+pointing `api.osv.dev` at the proxy, **no application code changes** are
+needed.
+
+* The proxy mounts a TLS Secret `osv-proxy-tls`
+  (`kubectl create secret tls osv-proxy-tls --cert=api.osv.dev.crt
+  --key=api.osv.dev.key`) signed by your **internal CA**.
+* **Cert gotcha:** a self-signed *leaf* cert is rejected by OpenSSL/curl
+  (`SSL certificate problem: self-signed certificate (18)`) even when passed
+  as `--cacert`. Use a 2-tier PKI (CA -> server cert); `scripts/local-proxy.sh`
+  generates this for you.
+* The DMZ copy of `osv-service` must **not** be behind this proxy — there
+  `api.osv.dev` stays real internet so `download` can sync from GCS. The spoof
+  is intranet-only.
+
+```bash
+# Full local demo (build + kind + proxy), after ./scripts/local-test.sh:
+./scripts/local-proxy.sh
+# Then trust the generated CA and resolve api.osv.dev to this host.
+```
+
+### Helper scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/local-test.sh` | Builds the image, runs a `docker run` smoke test, boots a kind cluster, applies `deploy/test`, and verifies the API. Options: `--no-kind`, `--cleanup`. |
+| `scripts/local-proxy.sh` | Generates the 2-tier CA->server PKI, deploys `deploy/proxy`, and validates `https://api.osv.dev` over TLS. |
+| `scripts/fetch-digest.sh` | Prints the current `@sha256` digests of Chainguard `python` `latest`/`latest-dev` for pasting into the `Dockerfile` ARGs. |
+| `scripts/gen-osv-lock.sh` | Regenerates `requirements-osv-service.txt` (hash-pinned, Python 3.12, linux) via `uv`. |
+| `scripts/install-tools.sh` | Installs kind/kubectl/etc. into `~/.local/bin` for the scripts above. |
+
+---
+
 ## Storage backends (replacing the temporary store with a real database)
 
 The query engine (`matcher.py`) is completely backend-agnostic: it only depends on
@@ -265,6 +372,9 @@ mypy src/
   record from the OSV GCS export, ingests it, and asserts the local service
   returns it and that the result is a subset of what the live API returns. It is
   intentionally tiny and skips cleanly when offline.
+
+Continuous fuzzing is provided by ClusterFuzzLite (`.clusterfuzzlite/`,
+exercised in CI and on OSS-Fuzz) using the Atheris/PyInstaller harness.
 
 ## Notes & limitations
 
