@@ -243,10 +243,13 @@ are pinned by `@sha256:` digest.
 
 Rules of thumb:
 - Lockfiles live in two places: scanner/CI lockfiles (bandit, semgrep,
-  pip-audit, fuzz, dev) in `.github/requirements/` (`*.in` sources + `*.txt`
-  lockfiles), and the app/runtime lockfiles `requirements-osv-service.{in,txt}`
-  and `requirements-dev.{in,txt}` at the repo root (the Dockerfile `COPY`s the
-  osv-service lockfile from the root).
+  pip-audit, fuzz, **dev**) in `.github/requirements/` (`*.in` sources +
+  `*.txt` lockfiles) — the `dev` lock is the single canonical dev/test
+  environment (runtime deps + pytest/ruff/mypy/etc.) used by both CI and local
+  work. The only root-level lockfile is the app/runtime lockfile
+  `requirements-osv-service.{in,txt}` (the Dockerfile `COPY`s it from the root).
+  There is intentionally **no** `requirements-dev.*` at the repo root — do not
+  recreate one (it previously drifted from the canonical `.github` copy).
 - Generate with `uv pip compile --generate-hashes --python-version <V>`:
   - security.yml jobs (`ubuntu-latest`, `setup-python: '3.10'`) → `--python-version 3.10`
   - ClusterFuzzLite (`gcr.io/oss-fuzz-base/base-builder-python`, Python 3.11) → `--python-version 3.11`
