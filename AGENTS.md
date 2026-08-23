@@ -137,16 +137,29 @@ PR notes.
     `8443` so the container stays non-root) + `nginx.conf`. It mounts a `tls`
     Secret `osv-proxy-tls` (`kubectl create secret tls osv-proxy-tls
     --cert=api.osv.dev.crt --key=api.osv.dev.key`). Use your **internal-CA**-signed
-    cert in production; the proxy only guarantees the endpoints `osv-service`
-    implements (anything experimental/unimplemented returns 404).
+     cert in production; the proxy only guarantees the endpoints defined below
+     (anything experimental/unimplemented returns 404).
+  - **Cert gotcha (do NOT repeat):** A single **self-signed leaf** cert
+    (`openssl req -x509` with `subjectAltName`/`basicConstraints` via `-addext`,
+    or even with `CA:TRUE`) is rejected by OpenSSL/curl with
+    `SSL certificate problem: self-signed certificate (18)` even when passed as
+    `--cacert` — a self-signed *leaf* is never trusted as its own CA. The fix is
+    a **2-tier PKI**: generate a CA cert (self-signed, `basicConstraints=CA:TRUE,
+    keyUsage=keyCertSign`), then sign a **server** cert (SAN `DNS:api.osv.dev`,
+    `extendedKeyUsage=serverAuth`) with that CA. nginx serves the server cert;
+    clients trust the **CA** cert (`--cacert ca.crt` / import CA into trust
+    store). `-addext` is also silently ignored on some OpenSSL builds (LibreSSL),
+    so generate via a config file (`-config`), not `-addext`. `scripts/local-proxy.sh`
+    does all of this; reuse its CA/server approach rather than hand-rolling one cert.
   - The DMZ copy of `osv-service` must NOT be behind this proxy — there
     `api.osv.dev` stays real internet so `osv-service download` can sync from GCS.
     The spoof is intranet-only.
-  - **Local demo:** `scripts/local-proxy.sh` generates a self-signed
-    `api.osv.dev` cert, creates the Secret, deploys the proxy into the existing
-    kind cluster, loads the test fixture, and validates
-    `https://api.osv.dev` reaches `osv-service` over TLS. For real local apps,
-    trust the cert and add `api.osv.dev` to your `hosts` file.
+  - **Local demo:** `scripts/local-proxy.sh` generates the 2-tier CA→server
+    PKI above (a self-signed leaf will NOT validate), creates the Secret,
+    deploys the proxy into the existing kind cluster, loads the test fixture,
+    and validates `https://api.osv.dev` reaches `osv-service` over TLS. For
+    real local apps, trust the **CA** cert and add `api.osv.dev` to your
+    `hosts` file.
 
 ### Implementation Status (vs. Original PowerShell)
 
