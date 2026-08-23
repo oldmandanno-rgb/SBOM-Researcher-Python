@@ -97,9 +97,12 @@ PR notes.
   runtime = `latest`, no shell, runs as `nonroot`). `osv-service serve` is the entrypoint.
 - **SBOM:** the base layer ships a Chainguard-generated SBOM; the *full* image SBOM
   (including pip deps) is produced in CI by `syft` and signed with `cosign`.
-- **k8s:** `deploy/` has `deployment.yaml` (runAsNonRoot, readOnlyRootFilesystem,
-  dropped caps, TCP probes), `service.yaml` (ClusterIP + PVC; point intranet DNS
-  `api.osv.dev` at it), and `kustomization.yaml`.
+- **k8s:** `deploy/` is a kustomize tree — `deploy/base/` (Deployment with
+  runAsNonRoot, readOnlyRootFilesystem, dropped caps, TCP probes; Service
+  ClusterIP + PVC; `kustomization.yaml`), `deploy/test/` (overlay rewriting the
+  image to `osv-service:local`), and `deploy/proxy/` (the `api.osv.dev` TLS
+  reverse proxy). The top-level `deploy/kustomization.yaml` applies `base`.
+  Point intranet DNS `api.osv.dev` at the proxy (see Option B below).
 - **CI:** `.github/workflows/build-osv-service.yml` builds, runs Trivy (fail on
   HIGH/CRITICAL), emits an SPDX SBOM, then runs a **container smoke test** (mounts
   `tests/fixtures/osv_store` as `/data` and asserts the API serves it) and a **real
@@ -215,8 +218,13 @@ sbom-researcher --sbom-path PATH --output-dir PATH --project-name NAME \
 ### Fixes Applied
 1. **Permissions**: Added `security-events: write` to SARIF-uploading jobs (Trivy, Semgrep, Scorecard)
 2. **pip-audit**: `|| true` to not fail on unpinned pip vulnerabilities
-3. **Scorecard**: `repo_token: ${{ secrets.GITHUB_TOKEN }}` + `exclude: Branch-Protection` (until branch protection configured)
-4. **Semgrep**: Pinned to `@v1` (stable) instead of `@main`
+3. **Scorecard**: `repo_token: ${{ secrets.GITHUB_TOKEN }}` set so results
+   publish; the `Branch-Protection` check now passes because branch protection is
+   enabled (see Branch Management) — the temporary `exclude` is no longer needed.
+4. **Semgrep**: Installed via the hash-pinned `.github/requirements/semgrep.txt`
+   lockfile (`pip install --require-hashes`) and run with
+   `--config p/security-audit,p/secrets,p/python` — no third-party GitHub Action,
+   so there is no `@main`/`@v1` action to pin.
 5. **Branch protection**: Now enabled — all changes via PR
 
 ### Hash-Pinned Requirements (CRITICAL — easy to get wrong)
@@ -234,7 +242,11 @@ are pinned by `@sha256:` digest.
 > that silently broke the Linux CI.
 
 Rules of thumb:
-- Lockfiles live in `.github/requirements/` (`*.in` sources + `*.txt` lockfiles).
+- Lockfiles live in two places: scanner/CI lockfiles (bandit, semgrep,
+  pip-audit, fuzz, dev) in `.github/requirements/` (`*.in` sources + `*.txt`
+  lockfiles), and the app/runtime lockfiles `requirements-osv-service.{in,txt}`
+  and `requirements-dev.{in,txt}` at the repo root (the Dockerfile `COPY`s the
+  osv-service lockfile from the root).
 - Generate with `uv pip compile --generate-hashes --python-version <V>`:
   - security.yml jobs (`ubuntu-latest`, `setup-python: '3.10'`) → `--python-version 3.10`
   - ClusterFuzzLite (`gcr.io/oss-fuzz-base/base-builder-python`, Python 3.11) → `--python-version 3.11`
@@ -249,8 +261,8 @@ Rules of thumb:
 ## Testing
 - Unit tests in `tests/` (68 tests passing)
   - `tests/test_models.py` - 4 tests for data models
-  - `tests/test_parser.py` - 33 tests for parser, CVSS v3/v4, license classification, version handling, purl extraction, purl validation, version normalization
-  - `tests/test_osv_client.py` - 14 tests for OSV client, CVSS breakdown, vulnerability parsing
+  - `tests/test_parser.py` - 34 tests for parser, CVSS v3/v4, license classification, version handling, purl extraction, purl validation, version normalization
+  - `tests/test_osv_client.py` - 13 tests for OSV client, CVSS breakdown, vulnerability parsing
   - `tests/test_osv_service.py` - 14 tests for the OSV mirror API parity + SBOM-Researcher `OSVClient` integration
   - `tests/test_downloader.py` - 2 tests for GCS sync (incremental) + DMZ bundle/import transfer
   - `tests/test_smoke_realdata.py` - 1 real-data parity test (marker `smoke`, network-guarded, fetches a single real record)
@@ -310,12 +322,13 @@ pre-commit install  # optional
 ```
 
 ## Future Work
-- [ ] Full CVSS v4.0 score calculation (wait for `cvss` lib update or implement)
+- [x] Full CVSS v4.0 score calculation (via `cvss` >=3.6 `CVSS4`)
 - [ ] Integration tests with sample SBOMs
 - [ ] GitHub Release workflow
 - [ ] PyPI publishing workflow
 - [x] Docker image build (Chainguard `python`, multi-stage, hash-pinned)
 - [x] k8s manifests (`deploy/`: Deployment + Service + PVC)
+- [x] Transparent `api.osv.dev` TLS proxy (`deploy/proxy/`) for non-reconfigurable clients
 - [ ] Performance optimization for large SBOM sets
 - [ ] SPDX tag-value format support (currently JSON only)
 
