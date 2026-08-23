@@ -303,7 +303,7 @@ is the exact package name. The bundled `JsonFileStore`
 (`<data-dir>/<ECOSYSTEM>/<ID>.json`) is the **temporary / development** backend —
 it needs no server and is easy to copy, but it is not the production database.
 
-### Production: use SQL Server / Postgres instead
+### Production: use "YOUR DB BACKEND" instead
 
 Implement the same three methods against your real database and hand the instance
 to `create_app`. For example, with SQLAlchemy:
