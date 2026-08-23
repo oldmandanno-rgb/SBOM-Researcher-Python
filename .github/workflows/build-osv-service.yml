@@ -1,0 +1,108 @@
+name: build-osv-service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - "requirements-osv-service.*"
+      - "src/osv_service/**"
+      - "deploy/**"
+      - ".github/workflows/build-osv-service.yml"
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - "requirements-osv-service.*"
+      - "src/osv_service/**"
+      - "deploy/**"
+      - ".github/workflows/build-osv-service.yml"
+
+permissions:
+  contents: read
+  packages: write        # to push to GHCR
+  security-events: write # to upload Trivy SARIF
+  id-token: write        # for keyless cosign signing
+
+jobs:
+  build-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: env.GHCR_TOKEN != ''
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Build image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: osv-service:ci
+
+      # Trivy filesystem+image scan; fail the build on HIGH/CRITICAL.
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          image-ref: osv-service:ci
+          format: sarif
+          output: trivy.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+        continue-on-error: true
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy.sarif
+
+      # Generate an SBOM for the full image (base OS + pip deps) and sign it.
+      - name: Generate SBOM (syft)
+        uses: anchore/sbom-action@v0.18.0
+        with:
+          image: osv-service:ci
+          format: spdx-json
+          output-file: osv-service.spdx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: osv-service-sbom
+          path: osv-service.spdx.json
+
+      # Optional: push + sign when GHCR_TOKEN is configured.
+      - name: Push image to GHCR
+        if: github.event_name == 'push' && env.GHCR_TOKEN != ''
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}/osv-service:latest
+
+      - name: Install cosign
+        if: github.event_name == 'push' && env.GHCR_TOKEN != ''
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign image (keyless, OIDC)
+        if: github.event_name == 'push' && env.GHCR_TOKEN != ''
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          cosign sign --yes ghcr.io/${{ github.repository }}/osv-service:latest

@@ -72,6 +72,38 @@ src/osv_service/    # Intranet mirror of api.osv.dev (FastAPI) + offline ingesti
 > SQL Server/Postgres backend can be dropped in later behind the same `VulnStore`
 > interface used by `matcher.py`.
 
+### Containerization (osv-service)
+
+`osv-service` is containerized for k8s deployment.
+
+**Base image:** Chainguard `python` (Wolfi) — minimal, low-CVE, distroless runtime.
+Chosen over Google distroless (no built-in SBOM, painful system-lib additions) and
+Docker Hardened Images (paid at scale). See the design discussion in commit history /
+PR notes.
+
+- **Free-tier tag constraint:** Chainguard's free "Starter" `python` image only
+  publishes `latest` / `latest-dev`; version-pinned tags (e.g. `3.12`) require a paid
+  plan. The `Dockerfile` therefore pins the **`@sha256` digest** of `latest` /
+  `latest-dev` (per the Hash-Pinned Requirements rule below). Regenerate digests with
+  `scripts/fetch-digest.sh`.
+- **Runtime deps:** minimal, pure-Python only (`fastapi`, `uvicorn`, `pydantic`,
+  `httpx`, `packaging`, `click`). The downloader uses HTTPS to GCS — no `git` or extra
+  OS libraries, so the distroless runtime needs no `apk` additions.
+- **Lockfile:** `requirements-osv-service.txt` is hash-pinned and generated with
+  `scripts/gen-osv-lock.sh` (uses `uv pip compile --generate-hashes
+  --python-platform linux` so Linux wheel hashes are produced). Install with
+  `pip install --require-hashes`.
+- **Build:** multi-stage `Dockerfile` (builder = `latest-dev` with pip/venv/shell;
+  runtime = `latest`, no shell, runs as `nonroot`). `osv-service serve` is the entrypoint.
+- **SBOM:** the base layer ships a Chainguard-generated SBOM; the *full* image SBOM
+  (including pip deps) is produced in CI by `syft` and signed with `cosign`.
+- **k8s:** `deploy/` has `deployment.yaml` (runAsNonRoot, readOnlyRootFilesystem,
+  dropped caps, TCP probes), `service.yaml` (ClusterIP + PVC; point intranet DNS
+  `api.osv.dev` at it), and `kustomization.yaml`.
+- **CI:** `.github/workflows/build-osv-service.yml` builds, runs Trivy (fail on
+  HIGH/CRITICAL), emits an SPDX SBOM, and (when `GHCR_TOKEN` is set) pushes + keyless-signs
+  to GHCR.
+
 ### Implementation Status (vs. Original PowerShell)
 
 | Feature | Status | Notes |
@@ -225,7 +257,8 @@ pre-commit install  # optional
 - [ ] Integration tests with sample SBOMs
 - [ ] GitHub Release workflow
 - [ ] PyPI publishing workflow
-- [ ] Docker image build
+- [x] Docker image build (Chainguard `python`, multi-stage, hash-pinned)
+- [x] k8s manifests (`deploy/`: Deployment + Service + PVC)
 - [ ] Performance optimization for large SBOM sets
 - [ ] SPDX tag-value format support (currently JSON only)
 

@@ -1,0 +1,11 @@
+# Minimal runtime dependencies for the osv_service FastAPI app.
+# The osv_service package only needs these to run (it does NOT need the
+# SBOM-parsing stack: cyclonedx-python-lib, spdx-tools, cvss, rich).
+# The project itself is installed with `pip install . --no-deps` in the
+# Dockerfile; these pinned deps satisfy osv_service's import graph.
+fastapi>=0.110
+uvicorn>=0.29
+pydantic>=2.0
+httpx>=0.25
+packaging>=23
+click>=8.1

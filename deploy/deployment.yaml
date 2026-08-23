@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: osv-service
+  labels:
+    app.kubernetes.io/name: osv-service
+    app.kubernetes.io/part-of: sbom-researcher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: osv-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: osv-service
+        app.kubernetes.io/part-of: sbom-researcher
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: osv-service
+          # Replace with your built image (e.g. from the CI workflow).
+          image: REPLACE_WITH_YOUR_REGISTRY/osv-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            # Intranet (air-gapped) copy: never sync from GCS.
+            # Set "1" only on the DMZ copy that performs `osv-service download`.
+            - name: OSV_SYNC_ENABLED
+              value: "0"
+            - name: OSV_DATA_DIR
+              value: "/data"
+          # The image runs as nonroot (uid 65532) and the root FS is read-only;
+          # only /data (PVC) and /tmp (emptyDir) are writable.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: osv-service-data
+        - name: tmp
+          emptyDir: {}
