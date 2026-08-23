@@ -1,0 +1,15 @@
+.git
+.github
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.coverage
+.venv
+venv
+**/__pycache__
+tests
+*.md
+docs
+scripts
+clusterfuzzlite
+.osv_data

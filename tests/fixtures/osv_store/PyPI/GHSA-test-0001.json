@@ -1,0 +1,26 @@
+{
+  "id": "GHSA-test-0001",
+  "summary": "Test vulnerability used by the osv-service container smoke test",
+  "details": "Fixture record so CI and local `scripts/local-test.sh` can verify the container serves real data (read from /data at startup).",
+  "modified": "2024-01-01T00:00:00Z",
+  "published": "2024-01-01T00:00:00Z",
+  "aliases": ["CVE-2024-0001"],
+  "affected": [
+    {
+      "package": {
+        "ecosystem": "PyPI",
+        "name": "example"
+      },
+      "ranges": [
+        {
+          "type": "ECOSYSTEM",
+          "events": [
+            { "introduced": "0" },
+            { "fixed": "1.0.1" }
+          ]
+        }
+      ]
+    }
+  ],
+  "references": []
+}

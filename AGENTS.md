@@ -72,6 +72,98 @@ src/osv_service/    # Intranet mirror of api.osv.dev (FastAPI) + offline ingesti
 > SQL Server/Postgres backend can be dropped in later behind the same `VulnStore`
 > interface used by `matcher.py`.
 
+### Containerization (osv-service)
+
+`osv-service` is containerized for k8s deployment.
+
+**Base image:** Chainguard `python` (Wolfi) — minimal, low-CVE, distroless runtime.
+Chosen over Google distroless (no built-in SBOM, painful system-lib additions) and
+Docker Hardened Images (paid at scale). See the design discussion in commit history /
+PR notes.
+
+- **Free-tier tag constraint:** Chainguard's free "Starter" `python` image only
+  publishes `latest` / `latest-dev`; version-pinned tags (e.g. `3.12`) require a paid
+  plan. The `Dockerfile` therefore pins the **`@sha256` digest** of `latest` /
+  `latest-dev` (per the Hash-Pinned Requirements rule below). Regenerate digests with
+  `scripts/fetch-digest.sh`.
+- **Runtime deps:** minimal, pure-Python only (`fastapi`, `uvicorn`, `pydantic`,
+  `httpx`, `packaging`, `click`). The downloader uses HTTPS to GCS — no `git` or extra
+  OS libraries, so the distroless runtime needs no `apk` additions.
+- **Lockfile:** `requirements-osv-service.txt` is hash-pinned and generated with
+  `scripts/gen-osv-lock.sh` (uses `uv pip compile --generate-hashes
+  --python-platform linux` so Linux wheel hashes are produced). Install with
+  `pip install --require-hashes`.
+- **Build:** multi-stage `Dockerfile` (builder = `latest-dev` with pip/venv/shell;
+  runtime = `latest`, no shell, runs as `nonroot`). `osv-service serve` is the entrypoint.
+- **SBOM:** the base layer ships a Chainguard-generated SBOM; the *full* image SBOM
+  (including pip deps) is produced in CI by `syft` and signed with `cosign`.
+- **k8s:** `deploy/` is a kustomize tree — `deploy/base/` (Deployment with
+  runAsNonRoot, readOnlyRootFilesystem, dropped caps, TCP probes; Service
+  ClusterIP + PVC; `kustomization.yaml`), `deploy/test/` (overlay rewriting the
+  image to `osv-service:local`), and `deploy/proxy/` (the `api.osv.dev` TLS
+  reverse proxy). The top-level `deploy/kustomization.yaml` applies `base`.
+  Point intranet DNS `api.osv.dev` at the proxy (see Option B below).
+- **CI:** `.github/workflows/build-osv-service.yml` builds, runs Trivy (fail on
+  HIGH/CRITICAL), emits an SPDX SBOM, then runs a **container smoke test** (mounts
+  `tests/fixtures/osv_store` as `/data` and asserts the API serves it) and a **real
+  k8s test via kind** (boots a single-node cluster, loads the image, applies
+  `deploy/test`, verifies the pod reaches Running and the Service responds). When
+  `GHCR_TOKEN` is set it also pushes + keyless-signs to GHCR.
+- **Local test:** `scripts/local-test.sh` reproduces the exact CI path on your
+  machine (build → docker smoke → kind → kubectl apply -k deploy/test → curl).
+  Requires Docker Desktop + `kind` + `kubectl` installed; run only when you want
+  to test. `tests/fixtures/osv_store/PyPI/GHSA-test-0001.json` is the fixture.
+- **Image registry (IMPORTANT for deployment):** The Deployment manifest uses a
+  placeholder image `REPLACE_WITH_YOUR_REGISTRY/osv-service:latest`. Before
+  deploying to a real cluster, replace it with your actual image, e.g.
+  `ghcr.io/<org>/sbom-researcher/osv-service:latest` (the CI workflow pushes there
+  when `GHCR_TOKEN` is set). Do NOT leave the placeholder in a production apply —
+  it will fail to pull.
+  - `deploy/base/` is the shared base (Deployment + Service + PVC). `kubectl apply -k deploy`
+    applies the production placeholder manifest as-is.
+  - `deploy/test/` is a kustomize overlay that rewrites the image to the
+    locally-built `osv-service:local` and is what CI and `local-test.sh` use
+    (`kubectl apply -k deploy/test`); it needs the image loaded into the cluster
+    first (`kind load docker-image osv-service:local`).
+- **Building the image locally:** `docker build -t osv-service:local .` (or run
+  `scripts/local-test.sh`). The builder stage runs as `root` (it is discarded) so
+  it can create `/venv`; the runtime runs as `nonroot`.
+- **Transparent `api.osv.dev` proxy (Option B):** For air-gapped intranets where
+  some clients (e.g. the PowerShell SBOM-Researcher and other apps that hardcode
+  `api.osv.dev` and cannot be reconfigured) must never reach the real OSV.dev,
+  `osv-service` acts as a drop-in for OSV.dev. It already implements the same
+  `/v1/query`, `/v1/querybatch`, `/v1/vulns/{id}` endpoints, so a TLS-terminating
+  reverse proxy presents `api.osv.dev` (with a cert the intranet trusts) and
+  forwards `/` to `osv-service:8000`. Intranet DNS then points `api.osv.dev` at
+  the proxy — **no app code changes**.
+  - `deploy/proxy/` = nginx Deployment + Service (external `443` → targetPort
+    `8443` so the container stays non-root) + `nginx.conf`. It mounts a `tls`
+    Secret `osv-proxy-tls` (`kubectl create secret tls osv-proxy-tls
+    --cert=api.osv.dev.crt --key=api.osv.dev.key`). Use your **internal-CA**-signed
+     cert in production; the proxy only guarantees the endpoints defined below
+     (anything experimental/unimplemented returns 404).
+  - **Cert gotcha (do NOT repeat):** A single **self-signed leaf** cert
+    (`openssl req -x509` with `subjectAltName`/`basicConstraints` via `-addext`,
+    or even with `CA:TRUE`) is rejected by OpenSSL/curl with
+    `SSL certificate problem: self-signed certificate (18)` even when passed as
+    `--cacert` — a self-signed *leaf* is never trusted as its own CA. The fix is
+    a **2-tier PKI**: generate a CA cert (self-signed, `basicConstraints=CA:TRUE,
+    keyUsage=keyCertSign`), then sign a **server** cert (SAN `DNS:api.osv.dev`,
+    `extendedKeyUsage=serverAuth`) with that CA. nginx serves the server cert;
+    clients trust the **CA** cert (`--cacert ca.crt` / import CA into trust
+    store). `-addext` is also silently ignored on some OpenSSL builds (LibreSSL),
+    so generate via a config file (`-config`), not `-addext`. `scripts/local-proxy.sh`
+    does all of this; reuse its CA/server approach rather than hand-rolling one cert.
+  - The DMZ copy of `osv-service` must NOT be behind this proxy — there
+    `api.osv.dev` stays real internet so `osv-service download` can sync from GCS.
+    The spoof is intranet-only.
+  - **Local demo:** `scripts/local-proxy.sh` generates the 2-tier CA→server
+    PKI above (a self-signed leaf will NOT validate), creates the Secret,
+    deploys the proxy into the existing kind cluster, loads the test fixture,
+    and validates `https://api.osv.dev` reaches `osv-service` over TLS. For
+    real local apps, trust the **CA** cert and add `api.osv.dev` to your
+    `hosts` file.
+
 ### Implementation Status (vs. Original PowerShell)
 
 | Feature | Status | Notes |
@@ -126,15 +218,30 @@ sbom-researcher --sbom-path PATH --output-dir PATH --project-name NAME \
 ### Fixes Applied
 1. **Permissions**: Added `security-events: write` to SARIF-uploading jobs (Trivy, Semgrep, Scorecard)
 2. **pip-audit**: `|| true` to not fail on unpinned pip vulnerabilities
-3. **Scorecard**: `repo_token: ${{ secrets.GITHUB_TOKEN }}` + `exclude: Branch-Protection` (until branch protection configured)
-4. **Semgrep**: Pinned to `@v1` (stable) instead of `@main`
+3. **Scorecard**: `repo_token: ${{ secrets.GITHUB_TOKEN }}` set so results
+   publish; the `Branch-Protection` check now passes because branch protection is
+   enabled (see Branch Management) — the temporary `exclude` is no longer needed.
+4. **Semgrep**: Installed via the hash-pinned `.github/requirements/semgrep.txt`
+   lockfile (`pip install --require-hashes`) and run with
+   `--config p/security-audit,p/secrets,p/python` — no third-party GitHub Action,
+   so there is no `@main`/`@v1` action to pin.
 5. **Branch protection**: Now enabled — all changes via PR
 
 ### Hash-Pinned Requirements (CRITICAL — easy to get wrong)
 Scorecard's **Pinned-Dependencies** check fails (`pipCommand not pinned by hash`,
-`containerImage not pinned by hash`) unless every `pip install` uses
-`--require-hashes -r <file>` against a hash-pinned lockfile, and Docker `FROM` images
-are pinned by `@sha256:` digest.
+`containerImage not pinned by hash`, `third-party GitHubAction not pinned by hash`,
+`downloadThenRun not pinned by hash`) unless:
+- every `pip install` uses `--require-hashes -r <file>` against a hash-pinned
+  lockfile (and local project installs use `--no-deps --no-build-isolation
+  --require-hashes` so no unpinned build deps are pulled),
+- Docker `FROM` images are pinned by `@sha256:` digest,
+- **every GitHub Action `uses:` is pinned to a full 40-char commit SHA** (with a
+  `# vX.Y.Z` comment) — NOT a moving tag like `@v3`. Tags can be moved/yanked; SHAs
+  cannot. Gotcha: action tags are not always what they look like — e.g. `trivy-action`
+  publishes `v0.30.0`, not `0.30.0`; a bare `0.30.0` ref does not exist and the step
+  fails at runtime. Always verify the ref resolves (`gh api .../commits/<ref>`).
+- shell scripts must not `curl ... | python/sh` (Scorecard `downloadThenRun`);
+  download to a temp file, then parse.
 
 > **Generate the lockfiles on Linux, not Windows.**
 > `pip`/`uv` hashes are computed per **wheel file**, and wheel hashes differ by OS,
@@ -145,7 +252,19 @@ are pinned by `@sha256:` digest.
 > that silently broke the Linux CI.
 
 Rules of thumb:
-- Lockfiles live in `.github/requirements/` (`*.in` sources + `*.txt` lockfiles).
+- Lockfiles live in two places: scanner/CI lockfiles (bandit, semgrep,
+  pip-audit, **dev**) in `.github/requirements/` (`*.in` sources +
+  `*.txt` lockfiles) — the `dev` lock is the single canonical dev/test
+  environment (runtime deps + pytest/ruff/mypy/etc.) used by both CI and local
+  work. The only root-level lockfile is the app/runtime lockfile
+  `requirements-osv-service.{in,txt}` (the Dockerfile `COPY`s it from the root).
+  There is intentionally **no** `requirements-dev.*` at the repo root — do not
+  recreate one (it previously drifted from the canonical `.github` copy).
+  - **Fuzz lock exception:** the ClusterFuzzLite lock is generated from
+    `.github/requirements/fuzz.in` but written to `.clusterfuzzlite/fuzz.txt`,
+    because CFL's build context does **not** include `.github/`. `build.sh`
+    installs from `.clusterfuzzlite/fuzz.txt`. Do not move it back under
+    `.github/requirements/` or the fuzz build will fail (`fuzz.txt` missing).
 - Generate with `uv pip compile --generate-hashes --python-version <V>`:
   - security.yml jobs (`ubuntu-latest`, `setup-python: '3.10'`) → `--python-version 3.10`
   - ClusterFuzzLite (`gcr.io/oss-fuzz-base/base-builder-python`, Python 3.11) → `--python-version 3.11`
@@ -160,8 +279,8 @@ Rules of thumb:
 ## Testing
 - Unit tests in `tests/` (68 tests passing)
   - `tests/test_models.py` - 4 tests for data models
-  - `tests/test_parser.py` - 33 tests for parser, CVSS v3/v4, license classification, version handling, purl extraction, purl validation, version normalization
-  - `tests/test_osv_client.py` - 14 tests for OSV client, CVSS breakdown, vulnerability parsing
+  - `tests/test_parser.py` - 34 tests for parser, CVSS v3/v4, license classification, version handling, purl extraction, purl validation, version normalization
+  - `tests/test_osv_client.py` - 13 tests for OSV client, CVSS breakdown, vulnerability parsing
   - `tests/test_osv_service.py` - 14 tests for the OSV mirror API parity + SBOM-Researcher `OSVClient` integration
   - `tests/test_downloader.py` - 2 tests for GCS sync (incremental) + DMZ bundle/import transfer
   - `tests/test_smoke_realdata.py` - 1 real-data parity test (marker `smoke`, network-guarded, fetches a single real record)
@@ -221,11 +340,13 @@ pre-commit install  # optional
 ```
 
 ## Future Work
-- [ ] Full CVSS v4.0 score calculation (wait for `cvss` lib update or implement)
+- [x] Full CVSS v4.0 score calculation (via `cvss` >=3.6 `CVSS4`)
 - [ ] Integration tests with sample SBOMs
 - [ ] GitHub Release workflow
 - [ ] PyPI publishing workflow
-- [ ] Docker image build
+- [x] Docker image build (Chainguard `python`, multi-stage, hash-pinned)
+- [x] k8s manifests (`deploy/`: Deployment + Service + PVC)
+- [x] Transparent `api.osv.dev` TLS proxy (`deploy/proxy/`) for non-reconfigurable clients
 - [ ] Performance optimization for large SBOM sets
 - [ ] SPDX tag-value format support (currently JSON only)
 

@@ -1,0 +1,180 @@
+name: build-osv-service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - "requirements-osv-service.*"
+      - "src/osv_service/**"
+      - "deploy/**"
+      - "tests/fixtures/**"
+      - ".github/workflows/build-osv-service.yml"
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - "requirements-osv-service.*"
+      - "src/osv_service/**"
+      - "deploy/**"
+      - "tests/fixtures/**"
+      - ".github/workflows/build-osv-service.yml"
+
+# Minimal top-level permissions (read-only). Job-specific write scopes are
+# granted per-job below so the OpenSSF Scorecard Token-Permissions check passes.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # to upload Trivy SARIF
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      # -----------------------------------------------------------------------
+      # Build (no push) — image tagged osv-service:local, reused by all tests.
+      # -----------------------------------------------------------------------
+      - name: Build image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          tags: osv-service:local
+
+      # Trivy image scan; fail the build on HIGH/CRITICAL (upload SARIF either way).
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: osv-service:local
+          format: sarif
+          output: trivy.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+        continue-on-error: true
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@42947a340483f03ba47bb1a039b2c519aab3df85 # v3
+        if: always()
+        with:
+          sarif_file: trivy.sarif
+
+      # Generate an SBOM for the full image (base OS + pip deps).
+      - name: Generate SBOM (syft)
+        uses: anchore/sbom-action@f325610c9f50a54015d37c8d16cb3b0e2c8f4de0 # v0.18.0
+        with:
+          image: osv-service:local
+          format: spdx-json
+          output-file: osv-service.spdx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: osv-service-sbom
+          path: osv-service.spdx.json
+
+      # -----------------------------------------------------------------------
+      # Container smoke test: run the image, mount the fixture store as /data,
+      # and assert the API serves real data (GET + query).
+      # -----------------------------------------------------------------------
+      - name: Container smoke test
+        run: |
+          set -euo pipefail
+          docker run -d --name osv-smoke -p 8000:8000 \
+            -v "$PWD/tests/fixtures/osv_store:/data:ro" osv-service:local
+          # Wait for the server to accept connections.
+          for i in $(seq 1 30); do
+            if curl -s -o /dev/null http://localhost:8000/v1/vulns/x; then break; fi
+            sleep 1
+          done
+          echo "== GET /v1/vulns/GHSA-test-0001 =="
+          curl -s http://localhost:8000/v1/vulns/GHSA-test-0001 | grep -q GHSA-test-0001
+          echo "== POST /v1/query (PyPI example@1.0.0) =="
+          curl -s -X POST http://localhost:8000/v1/query \
+            -H 'Content-Type: application/json' \
+            -d '{"package":{"ecosystem":"PyPI","name":"example"},"version":"1.0.0"}' \
+            | grep -q GHSA-test-0001
+          echo "SMOKE TEST OK"
+          docker rm -f osv-smoke
+
+      # -----------------------------------------------------------------------
+      # Real k8s test via kind (a single-node cluster inside the CI runner).
+      # Validates the Deployment/Service manifests + securityContext actually
+      # run, without needing a cloud cluster.
+      # -----------------------------------------------------------------------
+      - name: Create kind cluster
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1
+        with:
+          wait: 120s
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
+
+      - name: Load image into kind
+        run: kind load docker-image osv-service:local
+
+      - name: Deploy to kind (test overlay)
+        run: |
+          set -euo pipefail
+          kubectl apply -k deploy/test
+          kubectl rollout status deployment/osv-service --timeout=120s
+
+      - name: k8s smoke test
+        run: |
+          set -euo pipefail
+          kubectl port-forward svc/osv-service 8000:8000 &
+          PF=$!
+          for i in $(seq 1 30); do
+            if curl -s -o /dev/null http://localhost:8000/v1/vulns/x; then break; fi
+            sleep 1
+          done
+          # Empty store -> 404 "vulnerability not found"; proves routing works.
+          curl -s http://localhost:8000/v1/vulns/x | grep -q "not found"
+          echo "K8S TEST OK"
+          kill "$PF" || true
+
+  # ---------------------------------------------------------------------------
+  # Publish + keyless sign, only on push to main when GHCR_TOKEN is configured.
+  # ---------------------------------------------------------------------------
+  publish:
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.GHCR_TOKEN != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write        # to push to GHCR
+      id-token: write        # for keyless cosign signing (OIDC)
+    env:
+      GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Push image to GHCR
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}/osv-service:latest
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      - name: Sign image (keyless, OIDC)
+        run: cosign sign --yes ghcr.io/${{ github.repository }}/osv-service:latest

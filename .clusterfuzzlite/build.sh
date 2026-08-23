@@ -15,8 +15,10 @@
 #
 ################################################################################
 
-# Install the project's runtime dependencies (hash-pinned)
-pip3 install --require-hashes -r .github/requirements/fuzz.txt
+# Install the project's runtime dependencies (hash-pinned). The lock lives
+# alongside this script because ClusterFuzzLite's build context does not
+# include .github/, so a requirements file there would not be copied in.
+pip3 install --require-hashes -r .clusterfuzzlite/fuzz.txt
 
 # Make the local package importable so pyinstaller can bundle it at build time
 # (atheris and pyinstaller are pre-installed on the base image)
