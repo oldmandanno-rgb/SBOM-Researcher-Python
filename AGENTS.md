@@ -110,6 +110,21 @@ PR notes.
   machine (build → docker smoke → kind → kubectl apply -k deploy/test → curl).
   Requires Docker Desktop + `kind` + `kubectl` installed; run only when you want
   to test. `tests/fixtures/osv_store/PyPI/GHSA-test-0001.json` is the fixture.
+- **Image registry (IMPORTANT for deployment):** The Deployment manifest uses a
+  placeholder image `REPLACE_WITH_YOUR_REGISTRY/osv-service:latest`. Before
+  deploying to a real cluster, replace it with your actual image, e.g.
+  `ghcr.io/<org>/sbom-researcher/osv-service:latest` (the CI workflow pushes there
+  when `GHCR_TOKEN` is set). Do NOT leave the placeholder in a production apply —
+  it will fail to pull.
+  - `deploy/base/` is the shared base (Deployment + Service + PVC). `kubectl apply -k deploy`
+    applies the production placeholder manifest as-is.
+  - `deploy/test/` is a kustomize overlay that rewrites the image to the
+    locally-built `osv-service:local` and is what CI and `local-test.sh` use
+    (`kubectl apply -k deploy/test`); it needs the image loaded into the cluster
+    first (`kind load docker-image osv-service:local`).
+- **Building the image locally:** `docker build -t osv-service:local .` (or run
+  `scripts/local-test.sh`). The builder stage runs as `root` (it is discarded) so
+  it can create `/venv`; the runtime runs as `nonroot`.
 
 ### Implementation Status (vs. Original PowerShell)
 
