@@ -253,13 +253,18 @@ Scorecard's **Pinned-Dependencies** check fails (`pipCommand not pinned by hash`
 
 Rules of thumb:
 - Lockfiles live in two places: scanner/CI lockfiles (bandit, semgrep,
-  pip-audit, fuzz, **dev**) in `.github/requirements/` (`*.in` sources +
+  pip-audit, **dev**) in `.github/requirements/` (`*.in` sources +
   `*.txt` lockfiles) — the `dev` lock is the single canonical dev/test
   environment (runtime deps + pytest/ruff/mypy/etc.) used by both CI and local
   work. The only root-level lockfile is the app/runtime lockfile
   `requirements-osv-service.{in,txt}` (the Dockerfile `COPY`s it from the root).
   There is intentionally **no** `requirements-dev.*` at the repo root — do not
   recreate one (it previously drifted from the canonical `.github` copy).
+  - **Fuzz lock exception:** the ClusterFuzzLite lock is generated from
+    `.github/requirements/fuzz.in` but written to `.clusterfuzzlite/fuzz.txt`,
+    because CFL's build context does **not** include `.github/`. `build.sh`
+    installs from `.clusterfuzzlite/fuzz.txt`. Do not move it back under
+    `.github/requirements/` or the fuzz build will fail (`fuzz.txt` missing).
 - Generate with `uv pip compile --generate-hashes --python-version <V>`:
   - security.yml jobs (`ubuntu-latest`, `setup-python: '3.10'`) → `--python-version 3.10`
   - ClusterFuzzLite (`gcr.io/oss-fuzz-base/base-builder-python`, Python 3.11) → `--python-version 3.11`
