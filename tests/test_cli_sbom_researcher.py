@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Self
 from unittest.mock import MagicMock
 
 import httpx
 from click.testing import CliRunner
+from typing_extensions import Self
 
 from sbom_researcher import cli
 from sbom_researcher.cli import main
