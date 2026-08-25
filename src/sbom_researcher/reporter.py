@@ -38,7 +38,7 @@ class Reporter:
 
     def _generate_text_report(self, report: Report, path: Path, list_all: bool, print_licenses: bool) -> None:
         """Generate human-readable text report."""
-        with path.open("w") as f:
+        with path.open("w", encoding="utf-8") as f:
             f.write(f"SBOM-Researcher Report for Project: {self.project_name}\n")
             f.write("=" * 80 + "\n\n")
 
@@ -154,7 +154,7 @@ class Reporter:
                     vulnerabilities_list.append(vuln_data)
                 data.append(comp_data)
 
-        with path.open("w") as f:
+        with path.open("w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
     def _generate_loc_json(self, report: Report, path: Path) -> None:
@@ -163,7 +163,7 @@ class Reporter:
             {"component": loc.component, "version": loc.version, "file": loc.file}
             for loc in report.locations
         ]
-        with path.open("w") as f:
+        with path.open("w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
     def _generate_license_json(self, report: Report, path: Path) -> None:
@@ -174,5 +174,5 @@ class Reporter:
             "High": [l.name for l in report.licenses if l.action == LicenseAction.HIGH],
             "Unmapped": [l.name for l in report.licenses if l.action == LicenseAction.UNMAPPED]
         }
-        with path.open("w") as f:
+        with path.open("w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)

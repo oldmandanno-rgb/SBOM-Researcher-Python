@@ -49,8 +49,17 @@ class JsonFileStore:
     def get(self, vuln_id: str) -> dict[str, Any] | None:
         return self._records.get(vuln_id)
 
+    def _remove_from_index(self, vuln_id: str) -> None:
+        for key in list(self._index.keys()):
+            entries = self._index[key]
+            if vuln_id in entries:
+                entries.remove(vuln_id)
+                if not entries:
+                    del self._index[key]
+
     def add(self, ecosystem: str, vuln_id: str, record: dict[str, Any]) -> None:
         """Insert/update a record in memory and persist it to disk."""
+        self._remove_from_index(vuln_id)
         self._records[vuln_id] = record
         self._add_to_index(vuln_id, record)
         eco_dir = self.root / ecosystem
